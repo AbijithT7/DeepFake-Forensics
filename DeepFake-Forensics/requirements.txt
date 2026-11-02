@@ -1,0 +1,5 @@
+# ==============================================================================
+# DeepFake Forensics - Python Requirements
+# ==============================================================================
+# Dependencies will be added after checking the local NVIDIA GPU and Python compatibility.
+# (Do not install packages manually yet; verify CUDA toolkit version and torch support first.)
