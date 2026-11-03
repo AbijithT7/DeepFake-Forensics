@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Image | DeepFake Forensics{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Upload Forensic Evidence</h1>
+  <p class="page-subtitle">Select an image to analyze for AI manipulation and facial forgery using EfficientNet-B0.</p>
+</div>
+
+{% if error_message %}
+  <div class="alert alert-danger">
+    <i class="fa-solid fa-triangle-exclamation" style="font-size: 1.5rem;"></i>
+    <div>
+      <strong>Integrity Guard Alert:</strong> {{ error_message }}
+      {% if allow_full_image_bypass %}
+        <div style="margin-top: 0.5rem;">
+          <form method="POST" action="{{ url_for('analyze_action') }}" style="display: inline;">
+            <input type="hidden" name="sample_path" value="{{ bypass_image_path }}">
+            <input type="hidden" name="force_full_image" value="true">
+            <button type="submit" class="btn btn-secondary btn-sm">
+              <i class="fa-solid fa-arrow-right"></i> Proceed with Full-Image Analysis Anyway (Warning: May exhibit background bias)
+            </button>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+<div class="card" style="max-width: 800px; margin: 0 auto 2rem auto;">
+  <form id="upload-form" method="POST" action="{{ url_for('analyze_action') }}" enctype="multipart/form-data">
+    <input type="hidden" id="sample-input" name="sample_path" value="">
+
+    <div id="upload-dropzone" class="dropzone">
+      <div class="dropzone-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+      <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">Drag & drop image here, or click to browse</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">Supports JPG, JPEG, PNG, WEBP (RGB photos, portraits, or full scenes)</p>
+      <input type="file" id="file-input" name="image_file" accept="image/*" style="display: none;">
+    </div>
+
+    <div id="preview-container" style="display: none; margin-top: 1.5rem; text-align: center;">
+      <h4 style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 0.5rem;">Selected File Preview:</h4>
+      <div class="image-preview-frame" style="max-height: 280px;">
+        <img id="preview-img" src="" alt="Selected Preview">
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem; padding: 1.25rem; background: var(--bg-tertiary); border-radius: 8px;">
+      <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--accent-cyan);">
+        <i class="fa-solid fa-sliders"></i> Analysis Configuration
+      </h4>
+      <div class="grid-2">
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.35rem;">Evaluation Mode</label>
+          <select name="eval_mode" style="width: 100%; padding: 0.5rem; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px;">
+            <option value="face_crop" selected>Face-Based Crop (Recommended - Focuses on Facial Anatomy)</option>
+            <option value="full_image">Full Uncropped Image (Legacy Whole-Scene Analysis)</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.35rem;">Grad-CAM Target Class</label>
+          <select name="target_class" style="width: 100%; padding: 0.5rem; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px;">
+            <option value="predicted" selected>Predicted Class (Model's Top Attribution)</option>
+            <option value="fake">Target FAKE (Highlight Forgery-Indicative Regions)</option>
+            <option value="real">Target REAL (Highlight Authenticity-Indicative Regions)</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+        <input type="checkbox" id="run_occlusion" name="run_occlusion" value="true">
+        <label for="run_occlusion" style="font-size: 0.875rem; color: var(--text-main); cursor: pointer;">
+          Run Face-Focused Occlusion Sensitivity Analysis (Perturbation Test)
+        </label>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem; text-align: center;">
+      <button type="submit" id="submit-btn" class="btn btn-primary" style="padding: 0.85rem 2.5rem; font-size: 1.05rem;">
+        <i class="fa-solid fa-microscope"></i> Run Forensic Analysis
+      </button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+  <div class="card-title">
+    <span><i class="fa-solid fa-images" style="color: var(--accent-cyan); margin-right: 0.5rem;"></i> Quick Test Samples (Instant Execution)</span>
+  </div>
+  <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+    Test the pipeline immediately with pre-loaded benchmark sample images:
+  </p>
+
+  <div class="grid-2">
+    <button type="button" class="btn btn-secondary btn-sample-select" data-sample="tests/sample_image.jpg" style="text-align: left; justify-content: flex-start;">
+      <i class="fa-solid fa-user-ninja" style="color: var(--status-fake); font-size: 1.25rem;"></i>
+      <div>
+        <div style="font-weight: 700;">Sample Fake Face (GAN)</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">sample_image.jpg (High-res synthetic face)</div>
+      </div>
+    </button>
+
+    <button type="button" class="btn btn-secondary btn-sample-select" data-sample="tests/sample_image_real.jpg" style="text-align: left; justify-content: flex-start;">
+      <i class="fa-solid fa-user-check" style="color: var(--status-real); font-size: 1.25rem;"></i>
+      <div>
+        <div style="font-weight: 700;">Sample Real Face (Genuine)</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">sample_image_real.jpg (Genuine photo)</div>
+      </div>
+    </button>
+
+    <button type="button" class="btn btn-secondary btn-sample-select" data-sample="tests/sample_multiface.jpg" style="text-align: left; justify-content: flex-start;">
+      <i class="fa-solid fa-users" style="color: var(--accent-cyan); font-size: 1.25rem;"></i>
+      <div>
+        <div style="font-weight: 700;">Multi-Face Image (2 Faces)</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">sample_multiface.jpg (Multi-face detection)</div>
+      </div>
+    </button>
+
+    <button type="button" class="btn btn-secondary btn-sample-select" data-sample="tests/sample_noface.jpg" style="text-align: left; justify-content: flex-start;">
+      <i class="fa-solid fa-shield-halved" style="color: var(--status-warn); font-size: 1.25rem;"></i>
+      <div>
+        <div style="font-weight: 700;">No Face Image (Guard Test)</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">sample_noface.jpg (Triggers integrity guard)</div>
+      </div>
+    </button>
+  </div>
+</div>
+{% endblock %}

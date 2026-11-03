@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Face-Focused Occlusion Analysis | DeepFake Forensics{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Face-Focused Occlusion Sensitivity</h1>
+  <p class="page-subtitle">
+    Gradient-free perturbation analysis (Zeiler &amp; Fergus, 2014) on the <strong>Face Crop</strong> using <strong>EfficientNet-B0</strong>.
+    Measures the exact drop in model confidence when specific anatomical sectors are masked.
+  </p>
+</div>
+
+{% if session.occlusion_data %}
+  <!-- Occlusion Headline Summary -->
+  <div class="card" style="background: linear-gradient(180deg, #162033 0%, #101726 100%);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <h2 style="font-size: 1.35rem; font-weight: 700;">
+          Most Influential Facial Region:
+          <span style="color: var(--accent-cyan); margin-left: 0.5rem;">
+            <i class="fa-solid fa-crosshairs"></i> {{ session.occlusion_data.most_influential_region }}
+          </span>
+        </h2>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+          Masking this sector caused the largest drop in model target probability (Max Drop: <strong>{{ session.occlusion_data.max_drop | round(2) }}%</strong>).
+        </p>
+      </div>
+
+      <div style="background: var(--bg-card); padding: 0.75rem 1.25rem; border-radius: 8px; border: 1px solid var(--border-color); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Baseline Target Prob</div>
+        <div style="font-size: 1.35rem; font-weight: 800; color: var(--accent-blue);">
+          {{ session.occlusion_data.base_probability | round(1) }}% ({{ session.occlusion_data.target_class }})
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visual Grid -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">
+        <span><i class="fa-solid fa-crop" style="color: var(--status-real); margin-right: 0.5rem;"></i> Original Face Crop</span>
+      </div>
+      <div class="image-preview-frame">
+        <img src="{{ url_for('session_file', session_id=session.id, filename=session.artifacts.face_crop) }}" alt="Face Crop">
+      </div>
+      <div class="image-caption">Isolated Face Input Evaluated Under Perturbation</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span><i class="fa-solid fa-table-cells" style="color: var(--accent-blue); margin-right: 0.5rem;"></i> Occlusion Sensitivity Heatmap Overlay</span>
+      </div>
+      <div class="image-preview-frame">
+        {% if session.artifacts.occlusion_overlay %}
+          <img src="{{ url_for('session_file', session_id=session.id, filename=session.artifacts.occlusion_overlay) }}" alt="Occlusion Overlay">
+        {% elif session.artifacts.occlusion_efficientnet %}
+          <img src="{{ url_for('session_file', session_id=session.id, filename=session.artifacts.occlusion_efficientnet) }}" alt="Occlusion Overlay">
+        {% else %}
+          <div style="color: var(--text-dim);">No occlusion overlay image available</div>
+        {% endif %}
+      </div>
+      <div class="image-caption">Warm regions indicate areas where masking causes severe confidence drops</div>
+    </div>
+  </div>
+
+  <!-- Anatomical Sector Contribution Table & Progress Bars -->
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-chart-column" style="color: var(--accent-cyan); margin-right: 0.5rem;"></i> Anatomical Facial Sector Impact Breakdown</span>
+    </div>
+    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+      Relative percentage contribution of each anatomical facial sector to the EfficientNet-B0 decision:
+    </p>
+
+    <div style="margin-top: 1rem;">
+      {% if session.occlusion_data.region_impacts %}
+        {% for reg_name, impact in session.occlusion_data.region_impacts.items() %}
+          <div style="margin-bottom: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem;">
+              <span>
+                {% if reg_name == session.occlusion_data.most_influential_region %}
+                  <i class="fa-solid fa-star" style="color: #f59e0b; margin-right: 0.35rem;"></i>
+                {% endif %}
+                {{ reg_name }}
+              </span>
+              <span style="color: var(--accent-cyan);">{{ impact }}% impact</span>
+            </div>
+            <div class="progress-container" style="height: 10px;">
+              <div class="progress-bar blue" style="width: {{ impact }}%;"></div>
+            </div>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <table class="forensic-table" style="margin-top: 1.5rem;">
+      <thead>
+        <tr>
+          <th>Perturbation Parameter</th>
+          <th>Configured Value</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Sliding Patch Size</strong></td>
+          <td><code>{{ session.occlusion_data.patch_size }}&times;{{ session.occlusion_data.patch_size }} px</code></td>
+          <td>Size of sliding neutral-gray square occluder</td>
+        </tr>
+        <tr>
+          <td><strong>Sliding Stride</strong></td>
+          <td><code>{{ session.occlusion_data.stride }} px</code></td>
+          <td>Step displacement between perturbation passes</td>
+        </tr>
+        <tr>
+          <td><strong>Evaluated Architecture</strong></td>
+          <td><span class="model-badge">EfficientNet-B0</span></td>
+          <td>Single primary deepfake classifier</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="card" style="text-align: center; padding: 3rem 1.5rem;">
+    <div style="font-size: 3rem; color: var(--accent-blue); margin-bottom: 1rem;">
+      <i class="fa-solid fa-table-cells"></i>
+    </div>
+    <h3 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 0.5rem;">Occlusion Analysis Not Run Yet</h3>
+    <p style="color: var(--text-muted); font-size: 0.95rem; max-width: 600px; margin: 0 auto 1.5rem auto;">
+      Occlusion sensitivity tests require multiple sliding forward passes across the face. Click below to compute occlusion sensitivity now on this face crop.
+    </p>
+    <form method="POST" action="{{ url_for('run_occlusion_action', session_id=session.id) }}">
+      <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem;">
+        <i class="fa-solid fa-play"></i> Compute Face Occlusion Sensitivity Now
+      </button>
+    </form>
+  </div>
+{% endif %}
+{% endblock %}

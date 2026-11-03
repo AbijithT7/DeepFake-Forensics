@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis History | DeepFake Forensics{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Forensic Analysis History</h1>
+  <p class="page-subtitle">Chronological record of recent forensic sessions, verdicts, and explainability artifacts.</p>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-clock-rotate-left" style="color: var(--accent-cyan); margin-right: 0.5rem;"></i> Stored Forensic Sessions ({{ sessions | length }})</span>
+    {% if sessions %}
+      <form method="POST" action="{{ url_for('clear_history_action') }}" onsubmit="return confirm('Clear all analysis session history?');">
+        <button type="submit" class="btn btn-secondary btn-sm" style="color: var(--status-fake);">
+          <i class="fa-solid fa-trash"></i> Clear History
+        </button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if sessions %}
+    <div style="overflow-x: auto;">
+      <table class="forensic-table">
+        <thead>
+          <tr>
+            <th>Face Thumbnail</th>
+            <th>Evidence File</th>
+            <th>Timestamp</th>
+            <th>Primary Model</th>
+            <th>Verdict</th>
+            <th>Confidence</th>
+            <th>Forensic Risk</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sessions %}
+            <tr>
+              <td style="width: 70px;">
+                <div style="width: 50px; height: 50px; border-radius: 6px; overflow: hidden; background: #000; border: 1px solid var(--border-color);">
+                  {% if s.artifacts.face_crop %}
+                    <img src="{{ url_for('session_file', session_id=s.id, filename=s.artifacts.face_crop) }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;">
+                  {% elif s.artifacts.original %}
+                    <img src="{{ url_for('session_file', session_id=s.id, filename=s.artifacts.original) }}" alt="Thumb" style="width: 100%; height: 100%; object-fit: cover;">
+                  {% else %}
+                    <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--text-dim);">N/A</div>
+                  {% endif %}
+                </div>
+              </td>
+              <td><strong>{{ s.filename }}</strong></td>
+              <td style="font-size: 0.8rem; color: var(--text-muted);">{{ s.created_at }}</td>
+              <td><span class="model-badge">EfficientNet-B0</span></td>
+              <td>
+                <span class="badge-risk risk-{% if s.predicted_class == 'FAKE' %}high{% else %}low{% endif %}">
+                  {{ s.predicted_class }}
+                </span>
+              </td>
+              <td><strong>{{ s.confidence | round(1) }}%</strong></td>
+              <td>
+                {% if s.forensics %}
+                  <span class="badge-risk risk-{{ s.forensics.overall_manipulation_risk | lower }}">
+                    {{ s.forensics.overall_manipulation_risk }} ({{ s.forensics.overall_anomaly_index }})
+                  </span>
+                {% else %}
+                  <span style="color: var(--text-dim); font-size: 0.8rem;">N/A</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{{ url_for('results_page', session_id=s.id) }}" class="btn btn-primary btn-sm">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i> View Report
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div style="text-align: center; padding: 3rem 1.5rem;">
+      <div style="font-size: 2.5rem; color: var(--text-dim); margin-bottom: 0.75rem;">
+        <i class="fa-solid fa-folder-open"></i>
+      </div>
+      <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">No Analysis Sessions Recorded</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+        Upload an image or run one of our quick sample tests to see forensic records here.
+      </p>
+      <a href="{{ url_for('upload_page') }}" class="btn btn-primary">
+        <i class="fa-solid fa-cloud-arrow-up"></i> Go to Upload
+      </a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

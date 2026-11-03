@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Face-Focused Grad-CAM | DeepFake Forensics{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Face-Focused Grad-CAM Attribution</h1>
+  <p class="page-subtitle">
+    Gradient-weighted Class Activation Mapping computed strictly on the forward pass of the isolated <strong>Face Crop</strong> using <strong>EfficientNet-B0</strong> (<code>backbone.features.8</code>).
+  </p>
+</div>
+
+<!-- Grad-CAM Target Switcher Bar -->
+<div class="card" style="padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <strong>Attribution Target Mode:</strong>
+    <span class="model-badge" style="margin-left: 0.5rem; font-size: 0.85rem;">
+      Target Class: {{ session.target_class | upper }}
+    </span>
+  </div>
+
+  <div style="display: flex; gap: 0.5rem; align-items: center;">
+    <span style="font-size: 0.85rem; color: var(--text-muted);">Switch Target:</span>
+    <form method="POST" action="{{ url_for('reanalyze_target_action', session_id=session.id) }}" style="display: flex; gap: 0.5rem;">
+      <button type="submit" name="target" value="predicted" class="btn btn-secondary btn-sm {% if session.target_class == 'predicted' %}active{% endif %}">
+        Predicted Class
+      </button>
+      <button type="submit" name="target" value="fake" class="btn btn-secondary btn-sm {% if session.target_class == 'fake' %}active{% endif %}" style="color: var(--status-fake);">
+        <i class="fa-solid fa-triangle-exclamation"></i> Explain FAKE
+      </button>
+      <button type="submit" name="target" value="real" class="btn btn-secondary btn-sm {% if session.target_class == 'real' %}active{% endif %}" style="color: var(--status-real);">
+        <i class="fa-solid fa-circle-check"></i> Explain REAL
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- 4-Panel Grad-CAM Inspection Grid -->
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-crop" style="color: var(--status-real); margin-right: 0.5rem;"></i> 1. Original Face Crop</span>
+    </div>
+    <div class="image-preview-frame">
+      <img src="{{ url_for('session_file', session_id=session.id, filename=session.artifacts.face_crop) }}" alt="Original Face Crop">
+    </div>
+    <div class="image-caption">Preprocessed Face Crop Input Tensor (224&times;224 RGB)</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-fire" style="color: #f97316; margin-right: 0.5rem;"></i> 2. Raw Grad-CAM Heatmap</span>
+    </div>
+    <div class="image-preview-frame">
+      <img src="{{ url_for('session_file', session_id=session.id, filename=session.artifacts.efficientnet_heatmap) }}" alt="Raw Grad-CAM Heatmap">
+    </div>
+    <div class="image-caption">Normalized Activation Gradients from Terminal Conv Stage (Features.8)</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-layer-group" style="color: var(--accent-cyan); margin-right: 0.5rem;"></i> 3. Facial Heatmap Overlay</span>
+    </div>
+    <div class="image-preview-frame">
+      <img src="{{ url_for('session_file', session_id=session.id, filename=session.artifacts.efficientnet_overlay) }}" alt="Facial Heatmap Overlay">
+    </div>
+    <div class="image-caption">Alpha-Blended (50%) Turbo Colormap on Facial Anatomy</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span><i class="fa-solid fa-table-columns" style="color: var(--accent-blue); margin-right: 0.5rem;"></i> 4. Side-by-Side Comparison</span>
+    </div>
+    <div class="image-preview-frame">
+      <img src="{{ url_for('session_file', session_id=session.id, filename=session.artifacts.efficientnet_side_by_side) }}" alt="Side-by-Side Comparison">
+    </div>
+    <div class="image-caption">Direct Visual Comparison: Face Crop vs Grad-CAM Overlay</div>
+  </div>
+</div>
+
+<!-- Anatomical Region Guide & Forensic Interpretation -->
+<div class="card">
+  <div class="card-title">
+    <span><i class="fa-solid fa-dna" style="color: var(--accent-indigo); margin-right: 0.5rem;"></i> Facial Anatomy Attribution Guide</span>
+  </div>
+  <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+    Observe which spatial anatomical regions have the highest activation intensity (warmest colors: red/orange):
+  </p>
+
+  <div class="grid-3">
+    <div style="background: var(--bg-tertiary); padding: 0.85rem; border-radius: 6px;">
+      <h4 style="font-size: 0.9rem; color: var(--text-main); margin-bottom: 0.25rem;">
+        <i class="fa-solid fa-eye" style="color: var(--accent-cyan);"></i> Eyes & Brow Region
+      </h4>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">
+        GAN synthesis models frequently generate subtle pupil reflections, iris anomalies, or asymmetrical eyelids.
+      </p>
+    </div>
+
+    <div style="background: var(--bg-tertiary); padding: 0.85rem; border-radius: 6px;">
+      <h4 style="font-size: 0.9rem; color: var(--text-main); margin-bottom: 0.25rem;">
+        <i class="fa-solid fa-lungs" style="color: var(--accent-blue);"></i> Nose & Nasolabial Fold
+      </h4>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">
+        Central facial geometry provides primary anchor points for facial landmark alignment and depth perspective.
+      </p>
+    </div>
+
+    <div style="background: var(--bg-tertiary); padding: 0.85rem; border-radius: 6px;">
+      <h4 style="font-size: 0.9rem; color: var(--text-main); margin-bottom: 0.25rem;">
+        <i class="fa-solid fa-comment-dots" style="color: #f97316;"></i> Mouth, Lips & Teeth
+      </h4>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">
+        Teeth regularity, lip texture, and boundary blending artifacts frequently expose deepfake face re-enactment.
+      </p>
+    </div>
+  </div>
+
+  <div class="alert alert-warning" style="margin-top: 1.25rem; margin-bottom: 0;">
+    <i class="fa-solid fa-triangle-exclamation" style="font-size: 1.25rem;"></i>
+    <div style="font-size: 0.85rem;">
+      <strong>Scientific Disclaimer:</strong> Grad-CAM highlights which spatial pixel regions in the face crop had the highest mathematical influence on EfficientNet-B0's classification logit. It is an attribution tool, <em>not</em> standalone forensic proof that the highlighted region was modified.
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -35,3 +35,15 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ==============================
+# GENERATED FORENSIC OUTPUTS & SESSIONS
+# ==============================
+
+outputs/gradcam/*
+!outputs/gradcam/.gitkeep
+outputs/web_sessions/*
+!outputs/web_sessions/.gitkeep
+outputs/web_history.json
+outputs/evaluation/
+datasets/evaluation_benchmark/

@@ -1,5 +1,9 @@
 """Core Utilities Module.
 
-This package contains reusable helpers for configuration management, logging,
-data loading, preprocessing, metric calculation, and report generation.
+Contains reusable helpers for face detection, image preprocessing,
+metric calculation, and forensic visualization.
 """
+
+from src.utils.face_detector import FaceDetector
+
+__all__ = ["FaceDetector"]
