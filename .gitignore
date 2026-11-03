@@ -1,77 +1,37 @@
-# ==============================================================================
-# DeepFake Forensics - .gitignore
-# ==============================================================================
+# ==============================
+# SECRETS AND CREDENTIALS
+# ==============================
 
-# Python Virtual Environments
-.venv/
-venv/
-ENV/
-env/
-env.bak/
-venv.bak/
-
-# Byte-compiled / optimized / DLL files (Python cache)
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Environment Variables & Secrets
 .env
-.env.local
-.env.*.local
-*.env
+.env.*
 !.env.example
 
-# Downloaded Datasets & Data Files
-datasets/raw/*
-!datasets/raw/.gitkeep
-!datasets/raw/README.md
-datasets/processed/*
-!datasets/processed/.gitkeep
-!datasets/processed/README.md
-*.zip
-*.tar
-*.tar.gz
-*.tgz
-*.rar
-*.7z
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+service-account*.json
 
-# Model Weights, Checkpoints & Pretrained Artifacts
-models/*
-!models/.gitkeep
-!models/README.md
-*.pt
-*.pth
-*.onnx
-*.safetensors
-*.ckpt
-*.h5
-*.bin
-*.pkl
-*.joblib
+# ==============================
+# PYTHON ENVIRONMENT
+# ==============================
 
-# Generated Outputs, Reports, Visualizations & Logs
-outputs/*
-!outputs/.gitkeep
-!outputs/README.md
-*.log
-logs/
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
 
-# Jupyter Notebook Checkpoints
-.ipynb_checkpoints/
-*/.ipynb_checkpoints/*
+# ==============================
+# EDITOR AND OS FILES
+# ==============================
 
-# IDEs & Editor Configurations
 .vscode/
-!.vscode/settings.json
-!.vscode/extensions.json
 .idea/
-*.swp
-*.swo
-*~
-
-# Operating System Files
 .DS_Store
 Thumbs.db
 desktop.ini
