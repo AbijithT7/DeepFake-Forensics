@@ -1,0 +1,47 @@
+{
+  "model": "EfficientNet-B0",
+  "best_checkpoint": "C:\\Users\\abijith\\Desktop\\PROJECTS\\DeepFake-Forensics\\models\\efficientnet_b0_best.pth",
+  "evaluated_at_epoch": 5,
+  "test_dataset": "RVF10K 8020 (Untouched Test Split)",
+  "test_samples": 1000,
+  "test_loss": 0.0166,
+  "test_accuracy": 99.3,
+  "test_roc_auc": 99.99,
+  "confusion_matrix": [
+    [
+      499,
+      1
+    ],
+    [
+      6,
+      494
+    ]
+  ],
+  "classification_report": {
+    "FAKE": {
+      "precision": 0.9881188118811881,
+      "recall": 0.998,
+      "f1-score": 0.9930348258706467,
+      "support": 500.0
+    },
+    "REAL": {
+      "precision": 0.997979797979798,
+      "recall": 0.988,
+      "f1-score": 0.992964824120603,
+      "support": 500.0
+    },
+    "accuracy": 0.993,
+    "macro avg": {
+      "precision": 0.993049304930493,
+      "recall": 0.993,
+      "f1-score": 0.9929998249956249,
+      "support": 1000.0
+    },
+    "weighted avg": {
+      "precision": 0.993049304930493,
+      "recall": 0.993,
+      "f1-score": 0.9929998249956249,
+      "support": 1000.0
+    }
+  }
+}

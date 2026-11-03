@@ -1,0 +1,168 @@
+{
+  "counts": {
+    "6040": {
+      "train": {
+        "fake": 3000,
+        "real": 3000
+      },
+      "valid": {
+        "fake": 1000,
+        "real": 1000
+      },
+      "test": {
+        "fake": 1000,
+        "real": 1000
+      }
+    },
+    "7030": {
+      "train": {
+        "fake": 3500,
+        "real": 3500
+      },
+      "valid": {
+        "fake": 750,
+        "real": 750
+      },
+      "test": {
+        "fake": 750,
+        "real": 750
+      }
+    },
+    "7525": {
+      "train": {
+        "fake": 3750,
+        "real": 3750
+      },
+      "valid": {
+        "fake": 625,
+        "real": 625
+      },
+      "test": {
+        "fake": 625,
+        "real": 625
+      }
+    },
+    "8020": {
+      "train": {
+        "fake": 4000,
+        "real": 4000
+      },
+      "valid": {
+        "fake": 500,
+        "real": 500
+      },
+      "test": {
+        "fake": 500,
+        "real": 500
+      }
+    }
+  },
+  "total_files_scanned": 40000,
+  "total_unique_hashes": 10000,
+  "config_unique_hashes": {
+    "6040": 10000,
+    "7030": 10000,
+    "7525": 10000,
+    "8020": 10000
+  },
+  "config_overlap": {
+    "6040_vs_7030": 10000,
+    "6040_vs_7525": 10000,
+    "6040_vs_8020": 10000,
+    "7030_vs_7525": 10000,
+    "7030_vs_8020": 10000,
+    "7525_vs_8020": 10000
+  },
+  "leakage_report": {
+    "6040": {
+      "train_valid_overlap": 0,
+      "train_test_overlap": 0,
+      "valid_test_overlap": 0,
+      "real_fake_overlap": 0
+    },
+    "7030": {
+      "train_valid_overlap": 0,
+      "train_test_overlap": 0,
+      "valid_test_overlap": 0,
+      "real_fake_overlap": 0
+    },
+    "7525": {
+      "train_valid_overlap": 0,
+      "train_test_overlap": 0,
+      "valid_test_overlap": 0,
+      "real_fake_overlap": 0
+    },
+    "8020": {
+      "train_valid_overlap": 0,
+      "train_test_overlap": 0,
+      "valid_test_overlap": 0,
+      "real_fake_overlap": 0
+    }
+  },
+  "corrupted_count": 0,
+  "corrupted_files": [],
+  "multi_hash_names_count": 0,
+  "multi_name_hashes_count": 0,
+  "stats": {
+    "fake": {
+      "count": 20000,
+      "file_size_bytes": {
+        "min": 16887,
+        "max": 46068,
+        "mean": 28360.23,
+        "std": 3911.81,
+        "median": 27971.5
+      },
+      "widths": {
+        "min": 256,
+        "max": 256,
+        "mean": 256,
+        "std": 0.0,
+        "median": 256.0
+      },
+      "heights": {
+        "min": 256,
+        "max": 256,
+        "mean": 256,
+        "std": 0.0,
+        "median": 256.0
+      },
+      "formats": {
+        "JPEG": 20000
+      },
+      "modes": {
+        "RGB": 20000
+      }
+    },
+    "real": {
+      "count": 20000,
+      "file_size_bytes": {
+        "min": 16492,
+        "max": 46804,
+        "mean": 28889.33,
+        "std": 3932.01,
+        "median": 28630.5
+      },
+      "widths": {
+        "min": 256,
+        "max": 256,
+        "mean": 256,
+        "std": 0.0,
+        "median": 256.0
+      },
+      "heights": {
+        "min": 256,
+        "max": 256,
+        "mean": 256,
+        "std": 0.0,
+        "median": 256.0
+      },
+      "formats": {
+        "JPEG": 20000
+      },
+      "modes": {
+        "RGB": 20000
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "model": "EfficientNet-B0",
+  "dataset": "RVF10K 8020",
+  "seed": 42,
+  "epochs": [
+    {
+      "epoch": 1,
+      "train_loss": 0.3331,
+      "train_acc": 85.36,
+      "val_loss": 0.1567,
+      "val_acc": 93.9,
+      "val_auc": 98.72,
+      "lr": 0.000905463412215599,
+      "epoch_time_seconds": 891.94,
+      "is_best": true
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.1698,
+      "train_acc": 93.58,
+      "val_loss": 0.103,
+      "val_acc": 96.0,
+      "val_auc": 99.62,
+      "lr": 0.000657963412215599,
+      "epoch_time_seconds": 865.1,
+      "is_best": true
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.0916,
+      "train_acc": 96.24,
+      "val_loss": 0.0337,
+      "val_acc": 98.7,
+      "val_auc": 99.94,
+      "lr": 0.0003520365877844011,
+      "epoch_time_seconds": 1084.04,
+      "is_best": true
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.0454,
+      "train_acc": 98.4,
+      "val_loss": 0.0312,
+      "val_acc": 98.7,
+      "val_auc": 99.93,
+      "lr": 0.00010453658778440106,
+      "epoch_time_seconds": 845.75,
+      "is_best": true
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.0249,
+      "train_acc": 99.21,
+      "val_loss": 0.0242,
+      "val_acc": 99.1,
+      "val_auc": 99.96,
+      "lr": 1e-05,
+      "epoch_time_seconds": 840.19,
+      "is_best": true
+    }
+  ],
+  "total_training_time_seconds": 4529.53,
+  "best_epoch": 5,
+  "best_val_loss": 0.0242,
+  "best_val_acc": 99.1,
+  "best_val_auc": 99.96
+}
