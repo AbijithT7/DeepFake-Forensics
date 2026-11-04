@@ -129,7 +129,7 @@
                         <div class="step-number">3</div>
                         <div class="step-info">
                             <h2>Classification Verdict</h2>
-                            <p>Prediction based on EfficientNet-B0 facial authenticity analysis.</p>
+                            <p>Prediction from EfficientNet-B0 and ViT applied to the same SCRFD face crop.</p>
                         </div>
                     </div>
 
@@ -139,11 +139,13 @@
                             <span class="outcome-badge" id="outcomeBadge">ANALYZING</span>
                         </div>
                         <div class="verdict-score-wrap">
-                            <span class="verdict-label">Fused agreement confidence</span>
-                            <span class="verdict-score" id="scoreValue">--%</span>
-                            <span class="score-type-note">Lower confidence of the two agreeing models</span>
+                            <span class="verdict-label">Fusion decision</span>
+                            <span class="verdict-score" id="scoreValue">--</span>
+                            <span class="score-type-note" id="fusionReason">Waiting for model results</span>
                         </div>
                     </div>
+
+                    <div class="model-diagnostics" id="modelDiagnostics"></div>
 
                     <!-- Forensic Explanation -->
                     <div class="forensic-explanation" id="forensicExplanation">
@@ -166,7 +168,7 @@
         <!-- Footer -->
         <footer class="app-footer">
             <div class="footer-inner">
-                <p>DeepFake Forensics &bull; EfficientNet-B0 Backbone &bull; SCRFD Face Localization &bull; Standard Grad-CAM Attribution</p>
+                <p>DeepFake Forensics &bull; EfficientNet-B0 + ViT Classifiers &bull; SCRFD Face Localization &bull; EfficientNet Grad-CAM Attribution</p>
             </div>
         </footer>
     </div>

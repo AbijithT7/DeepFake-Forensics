@@ -38,6 +38,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const explanationIcon = document.getElementById("explanationIcon");
     const explanationTitle = document.getElementById("explanationTitle");
     const explanationText = document.getElementById("explanationText");
+    const modelDiagnostics = document.getElementById("modelDiagnostics");
+    const fusionReason = document.getElementById("fusionReason");
     const resetBtn = document.getElementById("resetBtn");
 
     // Alert Banner
@@ -318,19 +320,19 @@ document.addEventListener("DOMContentLoaded", () => {
                         </div>
 
                         <div class="visual-item">
-                            <span class="visual-item-title">2. Grad-CAM Heatmap</span>
+                            <span class="visual-item-title">2. EfficientNet Grad-CAM Heatmap</span>
                             <div class="visual-frame">
                                 <img src="${pred.gradcam_heatmap_base64}" alt="Grad-CAM Heatmap">
                             </div>
-                            <span class="visual-item-caption">Feature Attribution (Turbo)</span>
+                            <span class="visual-item-caption">EfficientNet feature attribution (Turbo)</span>
                         </div>
 
                         <div class="visual-item">
-                            <span class="visual-item-title">3. Attention Overlay</span>
+                            <span class="visual-item-title">3. EfficientNet Attention Overlay</span>
                             <div class="visual-frame">
                                 <img src="${pred.gradcam_overlay_base64 || pred.face_crop_base64}" alt="Grad-CAM Overlay">
                             </div>
-                            <span class="visual-item-caption">Active Regions Blended (Transparent Base)</span>
+                            <span class="visual-item-caption">EfficientNet active regions blended</span>
                         </div>
                     </div>
 
@@ -364,9 +366,75 @@ document.addEventListener("DOMContentLoaded", () => {
             gradcamFacesContainer.appendChild(block);
         });
 
-        // 2. Render Final Verdict (Step 3: Fake or Real)
+        // 2. Render model diagnostics and the final fusion decision.
         const primaryPred = finalPred;
         const overallLabel = primaryPred.label || "INCONCLUSIVE";
+        const efficientnet = primaryPred.efficientnet;
+        const vit = primaryPred.vit;
+        const fusion = primaryPred.fusion || {
+            label: overallLabel,
+            score: primaryPred.score,
+            reason: primaryPred.reason
+        };
+
+        function formatScore(score) {
+            return score === null || score === undefined ? "Unavailable" : `${(Number(score) * 100).toFixed(1)}%`;
+        }
+
+        function readableReason(reason) {
+            const reasons = {
+                face_not_usable: "Face quality rejection: the detected face failed a visibility or image-quality check.",
+                face_too_blurry: "Face quality rejection: the detected face is too blurry.",
+                face_too_small: "Face quality rejection: the detected face is too small.",
+                low_face_detection_confidence: "Face quality rejection: SCRFD detection confidence was too low.",
+                no_face_detected: "Face quality rejection: no usable face was detected.",
+                model_disagreement: "Model disagreement: EfficientNet and ViT produced conflicting predictions.",
+                low_confidence: "Low-confidence prediction: at least one model was below the configured threshold.",
+                model_unavailable_or_no_face: "Fusion unavailable: one or more model results are missing.",
+            };
+            return reasons[reason] ||
+                (reason ? reason.replace(/_/g, " ") :
+                    "Successful REAL/FAKE agreement: both models met the threshold and agreed.");
+        }
+
+        const modelCard = (name, result, detail) => {
+            if (!result) {
+                return `<article class="model-diagnostic unavailable">
+                    <div class="model-diagnostic-header"><strong>${name}</strong><span>UNAVAILABLE</span></div>
+                    <p>${detail}</p>
+                </article>`;
+            }
+            const label = result.label || "INCONCLUSIVE";
+            const probabilities = result.probabilities || {};
+            return `<article class="model-diagnostic">
+                <div class="model-diagnostic-header">
+                    <strong>${name}</strong>
+                    <span class="model-label ${label}">${label}</span>
+                </div>
+                <div class="model-score-grid">
+                    <span>REAL <strong>${formatScore(probabilities.REAL)}</strong></span>
+                    <span>FAKE <strong>${formatScore(probabilities.FAKE)}</strong></span>
+                    <span>Winning score <strong>${formatScore(result.score)}</strong></span>
+                </div>
+                <p class="model-preprocessing">${detail}</p>
+            </article>`;
+        };
+
+        modelDiagnostics.innerHTML = `
+            ${modelCard("EfficientNet-B0", efficientnet, "Same SCRFD crop &middot; 224&times;224 RGB &middot; ImageNet normalization")}
+            ${modelCard("ViT", vit, "Same SCRFD crop &middot; ViTImageProcessor preprocessing")}
+            <div class="fusion-diagnostic ${fusion.reason || "agreement"}">
+                <div class="model-diagnostic-header">
+                    <strong>Fusion decision</strong>
+                    <span class="model-label ${fusion.label || "INCONCLUSIVE"}">${fusion.label || "INCONCLUSIVE"}</span>
+                </div>
+                <p>${readableReason(fusion.reason)}</p>
+                <small>Policy: both models must meet the configured threshold and agree. No fused probability is shown.</small>
+            </div>
+        `;
+
+        scoreValue.textContent = fusion.label || "INCONCLUSIVE";
+        fusionReason.textContent = readableReason(fusion.reason);
 
         outcomeBadge.textContent = overallLabel === "FAKE" ? "FAKE (MANIPULATED)" :
                                    overallLabel === "REAL" ? "REAL (AUTHENTIC)" :
@@ -377,23 +445,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (primaryPred.score !== null && primaryPred.score !== undefined) {
             const scorePct = (primaryPred.score * 100).toFixed(1);
-            scoreValue.textContent = `${scorePct}%`;
+            scoreValue.textContent = fusion.label || overallLabel;
         } else {
-            scoreValue.textContent = "--%";
+            scoreValue.textContent = fusion.label || overallLabel;
         }
 
         if (overallLabel === "FAKE") {
             explanationIcon.textContent = "🚨";
             explanationTitle.textContent = "Synthetic / AI-Generated Face Detected";
-            explanationText.textContent = "Two independent classifiers agreed this face is manipulated. The Grad-CAM heatmap shows the EfficientNet-B0 regions supporting its vote.";
+            explanationText.textContent = "EfficientNet-B0 and ViT agreed this face is manipulated. The Grad-CAM view shows EfficientNet feature attribution, not proof of manipulation.";
         } else if (overallLabel === "REAL") {
             explanationIcon.textContent = "✅";
             explanationTitle.textContent = "Authentic Portrait Verified";
-            explanationText.textContent = "Two independent classifiers agreed this face is authentic. The Grad-CAM heatmap shows the EfficientNet-B0 regions supporting its vote.";
+            explanationText.textContent = "EfficientNet-B0 and ViT agreed this face is authentic. The Grad-CAM view shows EfficientNet feature attribution, not proof of authenticity.";
         } else {
             explanationIcon.textContent = "⚠️";
-            explanationTitle.textContent = "Inconclusive Analysis";
-            explanationText.textContent = `The system could not make a confident classification (${primaryPred.reason ? primaryPred.reason.replace(/_/g, " ") : "confidence below threshold"}). Please ensure the uploaded image has a clearly visible, well-lit human face.`;
+            const isFaceQualityRejection = ["no_face_detected", "face_not_usable",
+                                            "face_too_blurry", "face_too_small",
+                                            "low_face_detection_confidence"].includes(fusion.reason);
+            explanationTitle.textContent = fusion.reason === "model_disagreement" ? "Conflicting Model Predictions" :
+                                          fusion.reason === "low_confidence" ? "Low-Confidence Prediction" :
+                                          isFaceQualityRejection ? "Face Quality Rejection" :
+                                          "Inconclusive Analysis";
+            explanationText.textContent = `${readableReason(fusion.reason)} Please review the individual model scores above.`;
         }
 
         analysisResultsWrapper.classList.remove("hidden");
