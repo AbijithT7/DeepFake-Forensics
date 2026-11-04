@@ -1,165 +1,231 @@
 # DeepFake Forensics: AI-Powered Media Authenticity Detection
 
-[![Project Status: Initial Setup](https://img.shields.io/badge/status-initial_setup-yellow.svg)](#development-roadmap)
-[![Python: 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](#planned-technology-stack)
-[![PyTorch](https://img.shields.io/badge/PyTorch-Deep%20Learning-EE4C2C.svg)](#planned-technology-stack)
+A unified, production-grade deepfake media forensics application focusing strictly on detected facial regions using **EfficientNet-B0**, **ViT**, **SCRFD Face Detection**, and **Grad-CAM Model Explainability**.
 
 ---
 
-## 1. Project Overview
+## 1. System Architecture
 
-**DeepFake Forensics** is an open-source, collaborative AI/ML initiative designed to detect and analyze AI-synthesized, altered, or deepfaked multimedia assets. By integrating state-of-the-art computer vision models, temporal video analysis, and Explainable AI (XAI) techniques, the system evaluates digital media to distinguish authentic recordings from hyper-realistic generative manipulations (e.g., face swaps, lip-sync synthesis, full-face re-enactment, and diffusion-generated imagery).
+The application operates as a single, consistent pipeline:
 
----
+```text
+Frontend (HTML, CSS, JavaScript)
+        │
+        ▼
+FastAPI Backend (src/api/app.py)
+        │
+        ▼
+SCRFD Face Detection (models/scrfd_500m.onnx)
+        │
+        ▼
+Face Cropping & Quality Validation (blur, size, truncation)
+        │
+        ▼
+EfficientNet-B0 + ViT Classification (same SCRFD face crop)
+        │
+        ├───► Verdict: REAL / FAKE / INCONCLUSIVE
+        │
+        └───► Standard Grad-CAM (Target Layer: features[8])
+        │
+        ▼
+Analysis Results & Attributions returned to Frontend
+```
 
-## 2. Problem Statement
-
-Recent breakthroughs in generative adversarial networks (GANs), diffusion models, and neural rendering have democratized the creation of hyper-realistic synthetic media ("deepfakes"). While these technologies offer creative potential, they also pose severe risks:
-- Disinformation campaigns targeting public figures, elections, and democratic processes.
-- Financial fraud, social engineering, and identity theft.
-- Non-consensual imagery and reputational damage.
-- Erosion of public trust in digital evidence and journalism.
-
-Existing detection tools often operate as opaque "black boxes" with poor generalizability to unseen manipulation techniques and an inability to provide interpretable evidence to forensic analysts. **DeepFake Forensics** addresses this critical gap by delivering high-confidence detection paired with visual, transparent forensic explanations.
-
----
-
-## 3. Project Objectives
-
-- **High-Accuracy Detection**: Develop spatial and temporal deep learning models capable of detecting subtle manipulation artifacts across standard benchmarks (e.g., FaceForensics++, Celeb-DF, DFDC).
-- **Explainable Diagnostics**: Expose model decision-making through localization heatmaps (Grad-CAM, saliency) and frequency-domain artifact analysis so human analysts can verify results.
-- **Multi-Modal Media Support**: Provide robust detection pipelines for both static images and long-form video streams.
-- **Enterprise-Ready API & Interactive UI**: Build a modular FastAPI backend coupled with a React and TypeScript dashboard for seamless analysis and report generation.
-
----
-
-## 4. Planned Features
-
-> [!NOTE]
-> All features listed below are **PLANNED** for implementation in upcoming development sprints. None are currently active or implemented in this repository.
-
-### 🔍 Image Authenticity Detection *(Planned)*
-- Binary and multi-class classification for real vs. AI-generated/manipulated images.
-- Face landmark extraction and alignment to isolate regions of interest.
-- Frequency-domain artifact analysis (e.g., DCT/FFT spectrum anomalies produced by generative upsampling).
-
-### 🎬 Video Deepfake Detection *(Planned)*
-- Automated video demuxing, frame extraction, and face tracking across temporal sequences.
-- Spatiotemporal feature modeling to capture temporal jitter, unnatural blinking, and boundary inconsistencies across frames.
-
-### 📍 Suspicious-Region Visualization *(Planned)*
-- Bounding-box localization and segmentation masks highlighting suspect facial components (e.g., blending boundaries, unnatural eyes/mouth textures).
-
-### 🎞️ Frame-by-Frame Analysis *(Planned)*
-- Interactive timeline scrubber depicting per-frame authenticity confidence scores.
-- Anomaly aggregation highlighting key suspicious sequences within long-form video files.
-
-### 🧠 Explainable AI (XAI) *(Planned)*
-- Visual explanation layers utilizing Grad-CAM, Grad-CAM++, and feature attribution maps.
-- Confidence breakdowns explaining which biological or digital cues contributed to the prediction.
-
-### 📄 Forensic Report Generation *(Planned)*
-- Automated generation of downloadable forensic audit reports (PDF/JSON format) complete with timestamps, anomaly scores, highlighted artifacts, and chain-of-custody metadata.
+### Core Architectural Guarantees:
+1. **Dual classifier fusion**: EfficientNet-B0 and the cached ViT detector both receive the same validated SCRFD face crop. A result is conclusive only when both scores meet the configured threshold and both labels agree.
+2. **Single Face Detector**: Deep-learning **SCRFD (500M ONNX)** is the only active detector. The old heuristic skin detector has been completely removed.
+3. **No Scene Fallback**: The full photograph is **never** passed to the classifier. If no face is detected or if face quality is insufficient (too blurry, too small, or occluded), the engine returns an explicit `INCONCLUSIVE` verdict.
+4. **Standard Grad-CAM Formulation**: Attributions are computed directly on the terminal convolutional layer (`backbone.features[8]`) using global average pooling, ReLU rectification, min-max normalization, and bilinear upsampling to the face crop dimensions.
+5. **Transparent Inactive Heatmaps**: Inactive attribution regions remain 100% transparent on the visual overlay rather than receiving an artificial purple colormap tint.
+6. **Model Attention Disclaimer**: Grad-CAM is presented accurately as convolutional model attention/attribution, not standalone mathematical proof of manipulation.
 
 ---
 
-## 5. Planned Technology Stack
-
-| Domain | Technology / Library | Purpose |
-| :--- | :--- | :--- |
-| **Core Language** | **Python 3.10+** | Primary language for ML engineering, pipeline development, and APIs. |
-| **Deep Learning** | **PyTorch** | Neural network design, model training, GPU acceleration, and inference. |
-| **Computer Vision** | **OpenCV** | Video frame extraction, face alignment, image transformation, and preprocessing. |
-| **Model Backbone** | **EfficientNet** | High-efficiency convolutional backbone for spatial feature extraction and transfer learning. |
-| **Backend API** | **FastAPI** | High-performance asynchronous REST API for serving model predictions and reports. |
-| **Frontend UI** | **React & TypeScript** | Modern, responsive forensic analyst dashboard with video player and heatmap overlays. |
-
----
-
-## 6. Project Directory Structure
+## 2. Project Directory Structure
 
 ```text
 DeepFake-Forensics/
-│
-├── datasets/                 # Dataset storage and documentation
-│   ├── raw/                  # Raw, unmanipulated benchmark datasets (ignored by Git)
-│   ├── processed/            # Preprocessed face crops, frames, and metadata
-│   └── README.md             # Dataset documentation and sourcing instructions
-│
-├── models/                   # Model architectures and weights
-│   └── README.md             # Model registry and checkpoint management
-│
-├── notebooks/                # Exploratory Jupyter notebooks
-│   └── README.md             # Notebook conventions and experimental tracking
-│
-├── outputs/                  # Generated artifacts, evaluation plots, and reports
-│   └── README.md             # Guidelines for exported media and forensic logs
-│
-├── src/                      # Source code for production pipelines
-│   ├── image_detection/      # Image manipulation detection models & transforms
+├── datasets/                 # Dataset documentation and pointers
+│   └── README.md
+├── frontend/                 # Single-page Web Interface (HTML5, CSS3, ES6 JS)
+│   ├── index.html            # User interface layout
+│   ├── app.js                # Frontend client logic & API interaction
+│   ├── styles.css            # Modern styling & responsive layout
+│   └── samples/              # Quick-test sample portraits (Real & Fake)
+│       ├── real_sample.jpg
+│       └── fake_sample.jpg
+├── models/                   # Neural network weights
+│   ├── efficientnet_b0_best.pth  # Trained EfficientNet-B0 classifier (Untouched)
+│   ├── scrfd_500m.onnx       # SCRFD face detector ONNX model
+│   └── README.md
+├── outputs/                  # Exported test figures and crops
+│   ├── efficientnet_confusion_matrix.png
+│   ├── efficientnet_test_metrics.json
+│   └── gradcam/              # Visual attribution artifacts
+├── src/                      # Production application source code
+│   ├── api/                  # FastAPI backend service
+│   │   ├── app.py            # Endpoints: /health, /models/info, /predict/image
+│   │   ├── schemas.py        # Pydantic request/response schemas
 │   │   └── __init__.py
-│   │
-│   ├── video_detection/      # Video processing, temporal modeling & aggregation
+│   ├── evaluation/           # Benchmark evaluation on EfficientNet-B0
+│   │   ├── evaluate_model.py
 │   │   └── __init__.py
-│   │
-│   ├── explainability/       # XAI modules (Grad-CAM, saliency, visual attribution)
+│   ├── explainability/       # Grad-CAM explainability module
+│   │   ├── gradcam.py        # Standard Grad-CAM engine
+│   │   ├── visualizer.py     # Colormap & intensity-modulated overlays
+│   │   ├── pipeline.py       # Explainability CLI pipeline
+│   │   ├── README.md
 │   │   └── __init__.py
-│   │
-│   └── utils/                # Logging, configuration, I/O, and helper functions
+│   └── image_detection/      # Face detection & inference engine
+│       ├── efficientnet_model.py     # DeepfakeEfficientNetB0 architecture
+│       ├── face_detector.py          # SCRFD ONNX detector & quality gates
+│       ├── inference.py              # Unified DeepFakeInferenceEngine
+│       ├── predict_efficientnet.py   # Standalone prediction CLI
+│       ├── train_efficientnet.py     # EfficientNet training reference
 │       └── __init__.py
-│
-├── tests/                    # Unit, integration, and regression tests
-│   └── README.md             # Testing conventions and test runner instructions
-│
-├── requirements.txt          # Python project dependencies (to be finalized with GPU/CUDA)
-├── README.md                 # Project documentation and architectural overview
-├── .gitignore                # Git exclusions for secrets, virtualenvs, datasets, models
-└── .env.example              # Environment variables template
+├── tests/                    # Automated test suite
+│   ├── fixtures/             # Evaluation fixtures (blurry, small, occluded)
+│   ├── sample_image_real.jpg # Genuine portrait sample
+│   ├── sample_image_fake.jpg # AI-generated portrait sample (StyleGAN)
+│   ├── sample_landscape_noface.jpg # No-face test image
+│   ├── sample_multiple_faces.jpg   # Two-face test image
+│   ├── test_api.py           # Backend endpoints & static asset tests
+│   ├── test_face_pipeline.py # SCRFD cropping & quality validation tests
+│   ├── test_gradcam.py       # Grad-CAM math, hooks, and overlay tests
+│   ├── test_inference.py     # Unified inference engine unit tests
+│   └── README.md
+├── requirements.txt          # Python dependencies
+├── .env.example              # Environment variables template
+├── .gitignore                # Git exclusions
+└── README.md                 # Project documentation
 ```
 
 ---
 
-## 7. Development Roadmap
+## 3. Quick Start & Application Startup
 
-- [ ] **Phase 1: Environment Setup & Hardware Benchmarking**
-  - Check local NVIDIA GPU specifications, CUDA toolkit, and PyTorch compatibility.
-  - Finalize pinned dependencies in `requirements.txt`.
-- [ ] **Phase 2: Data Pipeline & Preprocessing**
-  - Download and prepare baseline benchmark datasets (e.g., FaceForensics++).
-  - Implement face detection, alignment, and frame-extraction pipelines in `src/utils/`.
-- [ ] **Phase 3: Image-Level Detection Baseline**
-  - Implement EfficientNet transfer learning backbone in `src/image_detection/`.
-  - Train baseline model, record validation metrics, and tune hyperparameters.
-- [ ] **Phase 4: Explainability & Interpretability (XAI)**
-  - Integrate Grad-CAM and attribution maps in `src/explainability/` to visualize manipulation boundaries.
-- [ ] **Phase 5: Spatiotemporal Video Pipeline**
-  - Implement temporal sequence modeling (LSTM / Transformer) in `src/video_detection/`.
-  - Build frame-by-frame confidence aggregation logic.
-- [ ] **Phase 6: Backend Service & Forensic Reporting**
-  - Build FastAPI endpoints for file uploads, inference jobs, and PDF forensic reports.
-- [ ] **Phase 7: Frontend Analyst Dashboard**
-  - Build React + TypeScript web client with interactive video scrubbing and heatmap overlays.
+### 1. Environment Setup
 
----
-
-## 8. Project Setup Instructions *(To Be Completed)*
-
-> [!IMPORTANT]
-> The setup instructions below will be finalized once local NVIDIA GPU specifications, CUDA toolkit compatibility, and Python environment details have been verified.
+Ensure Python 3.10+ is installed:
 
 ```bash
-# 1. Clone repository (Planned)
-# git clone <repository-url>
-# cd DeepFake-Forensics
+# Clone the repository
+git clone https://github.com/Abijith282005/DeepFake-Forensics.git
+cd DeepFake-Forensics
 
-# 2. Set up virtual environment (Planned)
-# python -m venv .venv
-# .venv\Scripts\activate   # Windows
-# source .venv/bin/activate # Linux / macOS
+# Activate virtual environment
+# Windows:
+.\.venv\Scripts\Activate.ps1
+# Linux/macOS:
+source .venv/bin/activate
 
-# 3. Install compatible PyTorch & CUDA packages (Planned)
-# pip install -r requirements.txt
-
-# 4. Configure environment variables (Planned)
-# cp .env.example .env
+# Install dependencies
+pip install -r requirements.txt
 ```
+
+### 2. Start the Application
+
+Start the FastAPI application with Uvicorn:
+
+```bash
+uvicorn src.api.app:app --host 127.0.0.1 --port 8000
+```
+
+Once running:
+- **Web Interface**: Open your browser at `http://127.0.0.1:8000`
+- **Interactive API Docs (Swagger UI)**: Navigate to `http://127.0.0.1:8000/docs`
+
+---
+
+## 4. API Specification
+
+### `GET /health`
+Returns backend readiness, compute device, and checkpoint status.
+
+```bash
+curl -X GET http://127.0.0.1:8000/health
+```
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "primary_model_loaded": true,
+  "primary_model": "EfficientNet-B0",
+  "face_detector": "SCRFD (ONNX)",
+  "device": "cpu",
+  "cuda_available": false
+}
+```
+
+### `GET /models/info`
+Returns architecture metadata for EfficientNet-B0 and SCRFD.
+
+```bash
+curl -X GET http://127.0.0.1:8000/models/info
+```
+
+### `POST /predict/image`
+Analyzes an uploaded image, isolates face regions with SCRFD, validates quality, runs EfficientNet-B0 and ViT classification, and computes EfficientNet Grad-CAM heatmaps. The response includes both model predictions, class scores, preprocessing metadata, and the fusion reason.
+
+```bash
+curl -X POST "http://127.0.0.1:8000/predict/image?include_gradcam=true" \
+  -F "file=@tests/sample_image_real.jpg"
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "faces_detected": 1,
+  "model_name": "EfficientNet-B0",
+  "execution_device": "cpu",
+  "uncertainty_threshold": 0.6,
+  "message": "Analyzed 1 detected face(s) independently.",
+  "predictions": [
+    {
+      "face_id": 1,
+      "label": "REAL",
+      "score": 0.9939,
+      "score_type": "uncalibrated_model_score",
+      "box": [45, 55, 150, 204],
+      "probabilities": {
+        "FAKE": 0.0061,
+        "REAL": 0.9939
+      },
+      "reason": null,
+      "face_crop_base64": "data:image/jpeg;base64,...",
+      "gradcam_heatmap_base64": "data:image/jpeg;base64,...",
+      "gradcam_overlay_base64": "data:image/jpeg;base64,..."
+    }
+  ]
+}
+```
+
+---
+
+## 5. Command-Line Interface (CLI)
+
+Run inference and generate visual Grad-CAM overlays directly from the terminal:
+
+```bash
+python -m src.explainability.pipeline --image tests/sample_image_real.jpg
+```
+
+Generated artifacts (face crop, Grad-CAM heatmap, overlay, side-by-side) will be exported to `outputs/gradcam/<image_name>/`.
+
+---
+
+## 6. Running Tests
+
+Run the full automated test suite covering all components:
+
+```bash
+python -m unittest discover tests
+```
+
+Test coverage includes:
+- **`test_inference.py`**: Model loading, device detection, REAL/FAKE predictions, no-face handling, multi-face isolation, uncertainty thresholds.
+- **`test_face_pipeline.py`**: 7 critical face scenarios (full scene, portrait, multi-face, no face, small face, blurry face, occluded face).
+- **`test_api.py`**: FastAPI endpoints, static frontend serving, upload validation, HTTP error codes.
+- **`test_gradcam.py`**: Mathematical formulation, hook cleanup, memory leak absence, resolution invariance, transparent overlay verification.

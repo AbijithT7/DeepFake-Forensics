@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepFake Forensics | Detection & Grad-CAM Explainability</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-inner">
+                <div class="branding">
+                    <div class="brand-icon">🛡️</div>
+                    <div class="brand-text">
+                        <h1>DeepFake Forensics</h1>
+                        <p class="subtitle">Face-Centric Authenticity Detection &amp; Grad-CAM Model Attention</p>
+                    </div>
+                </div>
+                <div class="system-status" id="systemStatus">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="statusText">Checking API...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Global Alert Banner -->
+            <div id="errorAlert" class="alert alert-error hidden">
+                <span class="alert-icon">⚠️</span>
+                <span id="errorMessage" class="alert-message">An error occurred</span>
+                <button type="button" class="alert-close" id="closeAlertBtn" aria-label="Close error message">&times;</button>
+            </div>
+
+            <!-- STEP 1: Upload Section -->
+            <section class="card step-card" id="uploadStepCard">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <div class="step-info">
+                        <h2>Upload Image</h2>
+                        <p>Upload a photo containing a human face. SCRFD isolates detected face regions with controlled margins for analysis.</p>
+                    </div>
+                </div>
+
+                <!-- Dropzone Box -->
+                <div class="dropzone" id="dropzone">
+                    <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.webp" class="file-input">
+                    
+                    <div class="dropzone-empty" id="dropzoneEmpty">
+                        <div class="upload-icon-circle">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                        </div>
+                        <p class="dropzone-main-text"><strong>Drag &amp; drop your image here</strong>, or <button type="button" class="browse-link" id="browseBtn">browse file</button></p>
+                        <p class="dropzone-sub-text">Supported formats: JPG, PNG, WEBP (Max 20MB)</p>
+
+                        <!-- Quick Sample Buttons -->
+                        <div class="samples-wrapper">
+                            <span class="samples-label">Or test with a sample:</span>
+                            <div class="samples-buttons">
+                                <button type="button" class="sample-btn sample-real" id="sampleRealBtn">
+                                    <span class="sample-dot real"></span> Sample Real Face
+                                </button>
+                                <button type="button" class="sample-btn sample-fake" id="sampleFakeBtn">
+                                    <span class="sample-dot fake"></span> Sample Fake Face
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Uploaded Image Preview Box -->
+                    <div class="preview-box hidden" id="previewBox">
+                        <div class="preview-img-container">
+                            <img id="previewImage" src="" alt="Uploaded image" class="preview-img">
+                        </div>
+                        <div class="preview-meta">
+                            <div class="file-info-group">
+                                <span class="file-name" id="fileName">image.jpg</span>
+                                <span class="file-size" id="fileSize">0 KB</span>
+                            </div>
+                            <div class="preview-actions">
+                                <button type="button" class="btn btn-secondary btn-sm" id="replaceBtn">Choose Another</button>
+                                <button type="button" class="btn btn-primary btn-sm" id="analyzeBtn">Analyze Image</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Loading State -->
+            <div class="loading-card hidden" id="loadingCard">
+                <div class="loader-spinner"></div>
+                <div class="loading-text-group">
+                    <h3 id="loadingTitle">Analyzing Image...</h3>
+                    <p id="loadingDesc">Detecting face boundaries &amp; computing Grad-CAM model attention...</p>
+                </div>
+            </div>
+
+            <!-- Analysis Container (Grad-CAM followed by Result) -->
+            <div class="analysis-results-wrapper hidden" id="analysisResultsWrapper">
+                
+                <!-- STEP 2: Grad-CAM Explainability Section -->
+                <section class="card step-card gradcam-card" id="gradcamStepCard">
+                    <div class="step-header">
+                        <div class="step-number">2</div>
+                        <div class="step-info">
+                            <h2>Grad-CAM Model Attention</h2>
+                            <p>Visualizing convolutional feature attribution on the exact preprocessed face tensor. Note: Grad-CAM reflects model activation patterns, not forensic proof of manipulation.</p>
+                        </div>
+                    </div>
+
+                    <!-- Faces Container for Grad-CAM Views -->
+                    <div id="gradcamFacesContainer" class="gradcam-faces-container">
+                        <!-- Dynamic Grad-CAM visualizations inserted here -->
+                    </div>
+                </section>
+
+                <!-- STEP 3: Classification Result Section -->
+                <section class="card step-card result-card" id="resultStepCard">
+                    <div class="step-header">
+                        <div class="step-number">3</div>
+                        <div class="step-info">
+                            <h2>Classification Verdict</h2>
+                            <p>Prediction based on EfficientNet-B0 facial authenticity analysis.</p>
+                        </div>
+                    </div>
+
+                    <!-- Primary Verdict Card -->
+                    <div class="verdict-banner" id="verdictBanner">
+                        <div class="verdict-badge-wrap">
+                            <span class="outcome-badge" id="outcomeBadge">ANALYZING</span>
+                        </div>
+                        <div class="verdict-score-wrap">
+                            <span class="verdict-label">Fused agreement confidence</span>
+                            <span class="verdict-score" id="scoreValue">--%</span>
+                            <span class="score-type-note">Lower confidence of the two agreeing models</span>
+                        </div>
+                    </div>
+
+                    <!-- Forensic Explanation -->
+                    <div class="forensic-explanation" id="forensicExplanation">
+                        <div class="explanation-icon" id="explanationIcon">🔍</div>
+                        <div class="explanation-body">
+                            <h4 id="explanationTitle">Analysis Summary</h4>
+                            <p id="explanationText">Evaluating image features...</p>
+                        </div>
+                    </div>
+
+                    <!-- Reset / New Analysis Action -->
+                    <div class="results-actions">
+                        <button type="button" class="btn btn-secondary" id="resetBtn">Upload Another Image</button>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div class="footer-inner">
+                <p>DeepFake Forensics &bull; EfficientNet-B0 Backbone &bull; SCRFD Face Localization &bull; Standard Grad-CAM Attribution</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/app.js"></script>
+</body>
+</html>

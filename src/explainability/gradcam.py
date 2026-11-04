@@ -1,12 +1,9 @@
 """
-Grad-CAM (Gradient-weighted Class Activation Mapping) Module.
-
-Provides model-agnostic, mathematically rigorous Grad-CAM generation for:
-1. Custom CNN (DeepfakeCNN)
-2. EfficientNet-B0 (DeepfakeEfficientNetB0)
+Grad-CAM (Gradient-weighted Class Activation Mapping) Module for EfficientNet-B0.
 
 Calculates the gradient of the target class score with respect to feature activation
-maps of the terminal convolutional layer, producing high-fidelity spatial attribution heatmaps.
+maps of the terminal convolutional layer (features[8]), producing high-fidelity
+spatial attribution heatmaps for model explainability.
 """
 
 from dataclasses import dataclass
@@ -42,16 +39,14 @@ def find_target_layer(model: nn.Module, layer_name: Optional[str] = None) -> Tup
 
     Priority order:
     1. Explicit layer_name string if supplied.
-    2. Model's built-in get_target_layer_for_gradcam() if defined.
-    3. Custom CNN specific layer (model.features[6] - the final Conv2d layer).
-    4. Last nn.Conv2d module in the network hierarchy.
+    2. Model's built-in get_target_layer_for_gradcam() if defined (e.g. DeepfakeEfficientNetB0 -> features[8]).
+    3. Last nn.Conv2d module in the network hierarchy.
     """
     if layer_name:
         try:
             target = model.get_submodule(layer_name)
             return target, layer_name
         except AttributeError:
-            # Fallback path traversal for older PyTorch versions
             parts = layer_name.split(".")
             curr = model
             for part in parts:
@@ -61,19 +56,13 @@ def find_target_layer(model: nn.Module, layer_name: Optional[str] = None) -> Tup
                     curr = getattr(curr, part)
             return curr, layer_name
 
-    # Check for custom method (e.g. DeepfakeEfficientNetB0)
+    # Check for custom method on DeepfakeEfficientNetB0
     if hasattr(model, "get_target_layer_for_gradcam") and callable(model.get_target_layer_for_gradcam):
         target = model.get_target_layer_for_gradcam()
-        # Find its name within the model
         for name, mod in model.named_modules():
             if mod is target:
                 return target, name
         return target, "backbone.features[8]"
-
-    # Check for DeepfakeCNN architecture (features[6] is final Conv2d(64, 128))
-    if hasattr(model, "features") and isinstance(model.features, nn.Sequential):
-        if len(model.features) >= 7 and isinstance(model.features[6], nn.Conv2d):
-            return model.features[6], "features.6 (Conv2d)"
 
     # Generic search: find the last Conv2d layer
     last_conv_name = None
@@ -94,16 +83,15 @@ def find_target_layer(model: nn.Module, layer_name: Optional[str] = None) -> Tup
 
 class GradCAM:
     """
-    Grad-CAM engine supporting Custom CNN and EfficientNet-B0 architectures.
+    Grad-CAM engine for EfficientNet-B0 deepfake explainability.
 
     Features:
-    - Robust forward & backward hooks with automatic cleanup to prevent memory leaks.
+    - Robust forward & tensor backward hooks with automatic cleanup to prevent memory leaks.
     - Unnormalized logit gradients (recommended by Selvaraju et al.) to prevent softmax saturation.
     - Global average pooling of gradients over spatial dimensions.
     - Positive rectification (ReLU) to focus solely on evidence supporting the target class.
     - Min-max normalization with epsilon division guard.
-    - Dynamic resizing to original input image resolution.
-    - Support for 'predicted', 'real', and 'fake' target class selections.
+    - Bilinear resizing to original face crop dimensions.
     """
 
     def __init__(
@@ -127,7 +115,6 @@ class GradCAM:
             self.target_layer, self.layer_name = find_target_layer(model, layer_name=target_layer)
         else:
             self.target_layer = target_layer
-            # Resolve name
             self.layer_name = self.target_layer.__class__.__name__
             for name, mod in model.named_modules():
                 if mod is target_layer:
@@ -151,11 +138,8 @@ class GradCAM:
         self._clear_hooks()
 
         def forward_hook(module: nn.Module, inp: Tuple[torch.Tensor, ...], out: torch.Tensor):
-            # Capture activations tensor
             self.activations = out.detach().clone()
 
-            # Attach a tensor backward hook on the output of this layer
-            # This avoids in-place modification issues (e.g. SiLU inplace in EfficientNet)
             def tensor_backward_hook(grad: torch.Tensor):
                 self.gradients = grad.detach().clone()
 
@@ -166,7 +150,7 @@ class GradCAM:
         self._hook_handles.append(handle)
 
     def _clear_hooks(self) -> None:
-        """Remove all registered hook handles and clear state."""
+        """Remove all registered hook handles and clear cached tensors."""
         for handle in self._hook_handles:
             try:
                 handle.remove()
@@ -190,13 +174,6 @@ class GradCAM:
     ) -> Tuple[int, str]:
         """
         Resolve user target class input to a valid class index and label.
-
-        Args:
-            target_class: 'predicted', 'real', 'fake', 0, 1, or None.
-            predicted_idx: Predicted class index (0 or 1).
-
-        Returns:
-            Tuple of (class_index, class_name).
         """
         if target_class is None or target_class == "predicted":
             return predicted_idx, CLASS_NAMES[predicted_idx]
@@ -231,7 +208,7 @@ class GradCAM:
         Args:
             input_tensor: 4D PyTorch tensor of shape (1, C, H, W).
             target_class: Target class to explain ('predicted', 'real', 'fake', 0, 1).
-            target_size: Optional (width, height) of original image for heatmap interpolation.
+            target_size: Optional (width, height) of original face crop for bilinear interpolation.
 
         Returns:
             GradCAMResult containing normalized heatmap, probabilities, and metadata.
@@ -244,9 +221,7 @@ class GradCAM:
 
         self._register_hooks()
         try:
-            # Enable gradients specifically for the Grad-CAM backward pass
             with torch.enable_grad():
-                # Forward pass
                 input_tensor.requires_grad_(True)
                 logits = self.model(input_tensor)
 
@@ -260,11 +235,9 @@ class GradCAM:
                 predicted_class = CLASS_NAMES[predicted_idx]
                 confidence = probabilities_tensor[predicted_idx].item() * 100.0
 
-                # Resolve target class index
                 target_idx, target_class_name = self.resolve_target_class(target_class, predicted_idx)
                 target_score = logits[0, target_idx]
 
-                # Backward pass to calculate gradients w.r.t. target layer activations
                 self.model.zero_grad()
                 if input_tensor.grad is not None:
                     input_tensor.grad.zero_()
@@ -277,20 +250,19 @@ class GradCAM:
                     "Ensure the layer is reached during forward/backward execution."
                 )
 
-            # Step 4: Global average pooling over spatial dimensions
+            # Global average pooling over spatial dimensions:
             # Gradients shape: (1, C, H_feat, W_feat) -> weights: (1, C, 1, 1)
             weights = torch.mean(self.gradients, dim=(2, 3), keepdim=True)
 
-            # Step 5: Weighted combination of activation channels
+            # Weighted combination of activation channels
             cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
 
-            # Step 6: Apply ReLU - keep only features positively contributing to target class
+            # Positive rectification (ReLU) - focus on features positively contributing to target class
             cam = F.relu(cam)
 
-            # Raw low-resolution CAM for forensic inspection
             raw_cam_np = cam.squeeze().cpu().numpy().astype(np.float32)
 
-            # Step 7: Min-Max normalization
+            # Min-Max normalization
             cam_min = cam.min()
             cam_max = cam.max()
             if cam_max > cam_min:
@@ -298,7 +270,7 @@ class GradCAM:
             else:
                 cam = torch.zeros_like(cam)
 
-            # Step 8: Bilinear resize to original image resolution (W, H)
+            # Bilinear interpolation to target face crop dimensions (W, H)
             if target_size is not None:
                 width, height = target_size
                 cam = F.interpolate(
@@ -309,7 +281,6 @@ class GradCAM:
                 )
 
             heatmap_np = cam.squeeze().cpu().numpy().astype(np.float32)
-            # Clip between [0, 1]
             heatmap_np = np.clip(heatmap_np, 0.0, 1.0)
 
             model_name = getattr(self.model, "__class__", type(self.model)).__name__

@@ -4,9 +4,9 @@ Comprehensive Model Evaluation and Benchmarking Module for EfficientNet-B0.
 Evaluates the trained EfficientNet-B0 deepfake detector across standard forensic benchmarks
 and diverse manipulation categories:
 1. Genuine Photographs (unmanipulated portraits)
-2. AI-Generated Portraits (StyleGAN / ThisPersonDoesNotExist)
+2. AI-Generated Portraits (StyleGAN / RVF10K)
 3. Face-Swapped Images (boundary splicing & blending)
-4. Facial Feature Alteration (eyes, nose, mouth morphing)
+4. Facial Feature Alteration (geometry morphing)
 5. Visible Facial Distortions (geometric warping / liquify)
 6. Lighting and Background Variations (harsh shadows, high-contrast scenes)
 7. Compressed and Resized Images (JPEG quality degradation)
@@ -16,16 +16,16 @@ Computes:
 - Confusion Matrix (TN, FP, FN, TP)
 - ROC-AUC Score
 - Category-by-category forensic breakdown
-- Multi-dataset Retraining Recommendations (FaceForensics++, Celeb-DF, DiffusionDB)
+- Retraining Recommendations
 """
 
 from dataclasses import asdict, dataclass
 import json
-import os
 from pathlib import Path
 import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
@@ -40,7 +40,6 @@ from sklearn.metrics import (
 import torch
 import torch.nn.functional as F
 
-# Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -50,8 +49,11 @@ from src.image_detection.efficientnet_model import (
     DeepfakeEfficientNetB0,
     get_eval_transform,
 )
+from src.image_detection.face_detector import (
+    SCRFDFaceDetector,
+    crop_face_with_controlled_margin,
+)
 from src.image_detection.predict_efficientnet import load_efficientnet_model
-from src.utils.face_detector import FaceDetector
 
 
 @dataclass
@@ -101,7 +103,7 @@ class DeepfakeModelEvaluator:
         self.checkpoint_path = Path(checkpoint_path) if checkpoint_path else PROJECT_ROOT / "models" / "efficientnet_b0_best.pth"
         self.model, self.device = load_efficientnet_model(checkpoint_path=self.checkpoint_path, device=device)
         self.transform = get_eval_transform()
-        self.face_detector = FaceDetector()
+        self.detector = SCRFDFaceDetector()
         self.use_face_crop = use_face_crop
 
     def evaluate_image(
@@ -121,11 +123,14 @@ class DeepfakeModelEvaluator:
         eval_img = pil_img
 
         if self.use_face_crop:
-            boxes = self.face_detector.detect_faces(pil_img)
-            if len(boxes) > 0:
-                face_crop, _ = self.face_detector.crop_face(pil_img, boxes[0])
-                eval_img = face_crop
-                face_detected = True
+            cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+            detections = self.detector.detect(cv_img)
+            if len(detections) > 0:
+                box = detections[0]["box"]
+                crop_bgr, _ = crop_face_with_controlled_margin(cv_img, box)
+                if crop_bgr.size > 0:
+                    eval_img = Image.fromarray(cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB))
+                    face_detected = True
 
         tensor = self.transform(eval_img).unsqueeze(0).to(self.device)
         self.model.eval()
@@ -155,36 +160,23 @@ class DeepfakeModelEvaluator:
 
         benchmark_items: List[Dict[str, Any]] = []
 
-        # Reference base images from tests/
         test_dir = PROJECT_ROOT / "tests"
         real_base = Image.open(test_dir / "sample_image_real.jpg").convert("RGB")
-        real1_base = Image.open(test_dir / "sample_image_real1.jpg").convert("RGB")
-        fake_base = Image.open(test_dir / "sample_image.jpg").convert("RGB")
-        fake_base2 = Image.open(test_dir / "sample_image_fake.jpg").convert("RGB")
+        fake_base = Image.open(test_dir / "sample_image_fake.jpg").convert("RGB")
 
         # 1. Genuine Photographs (Ground Truth: REAL = 1)
         real_p1 = out_dir / "genuine_01.jpg"
         real_base.save(real_p1, quality=95)
         benchmark_items.append({"path": real_p1, "label": 1, "category": "genuine_photograph", "desc": "Genuine portrait 1"})
 
-        real_p2 = out_dir / "genuine_02.jpg"
-        real1_base.save(real_p2, quality=95)
-        benchmark_items.append({"path": real_p2, "label": 1, "category": "genuine_photograph", "desc": "Genuine portrait 2"})
-
         # 2. AI-Generated Portraits (Ground Truth: FAKE = 0)
         ai_p1 = out_dir / "ai_gen_01.jpg"
         fake_base.save(ai_p1, quality=95)
         benchmark_items.append({"path": ai_p1, "label": 0, "category": "ai_generated_portrait", "desc": "StyleGAN synthetic portrait"})
 
-        ai_p2 = out_dir / "ai_gen_02.jpg"
-        fake_base2.save(ai_p2, quality=95)
-        benchmark_items.append({"path": ai_p2, "label": 0, "category": "ai_generated_portrait", "desc": "DeepFake 60k synthetic portrait"})
-
         # 3. Face-Swapped Images (Ground Truth: FAKE = 0)
-        # Simulate face swap blending boundary
         swap_img = real_base.copy()
         w, h = swap_img.size
-        # Splice central patch from fake_base resized
         fake_patch = fake_base.resize((int(w * 0.5), int(h * 0.5))).filter(ImageFilter.GaussianBlur(1))
         swap_img.paste(fake_patch, (int(w * 0.25), int(h * 0.25)))
         swap_p = out_dir / "faceswap_01.jpg"
@@ -192,8 +184,7 @@ class DeepfakeModelEvaluator:
         benchmark_items.append({"path": swap_p, "label": 0, "category": "face_swap", "desc": "Simulated face swap blend boundary"})
 
         # 4. Facial Feature Manipulations (Ground Truth: FAKE = 0)
-        # Distort eye region
-        manip_img = real1_base.copy()
+        manip_img = real_base.copy()
         mw, mh = manip_img.size
         eye_strip = manip_img.crop((int(mw * 0.2), int(mh * 0.25), int(mw * 0.8), int(mh * 0.45)))
         eye_distorted = eye_strip.resize((int(mw * 0.7), int(mh * 0.25))).filter(ImageFilter.SHARPEN)
@@ -204,14 +195,12 @@ class DeepfakeModelEvaluator:
 
         # 5. Visible Facial Distortions (Ground Truth: FAKE = 0)
         distort_img = real_base.copy()
-        # Liquify/warp effect simulation via localized coordinate displacement
         arr = np.array(distort_img)
         dh, dw, _ = arr.shape
         cy, cx = dh // 2, dw // 2
         y, x = np.ogrid[:dh, :dw]
         r = np.hypot(x - cx, y - cy)
         mask = r < (min(dh, dw) * 0.3)
-        # Warp coordinates
         arr_warped = arr.copy()
         arr_warped[mask] = np.roll(arr[mask], shift=12, axis=0)
         distort_pil = Image.fromarray(arr_warped).filter(ImageFilter.SMOOTH)
@@ -220,7 +209,7 @@ class DeepfakeModelEvaluator:
         benchmark_items.append({"path": distort_p, "label": 0, "category": "facial_distortion", "desc": "Visible facial contour distortion"})
 
         # 6. Lighting and Background Variations (Ground Truth: REAL = 1)
-        light_img = real1_base.copy()
+        light_img = real_base.copy()
         enhancer = ImageEnhance.Contrast(light_img)
         light_img = enhancer.enhance(1.8)
         enhancer_b = ImageEnhance.Brightness(light_img)
@@ -278,7 +267,6 @@ class DeepfakeModelEvaluator:
                 "desc": item["desc"],
             })
 
-        # Overall Metrics
         acc = float(accuracy_score(y_true, y_pred)) * 100.0
         prec = float(precision_score(y_true, y_pred, average="weighted", zero_division=0)) * 100.0
         rec = float(recall_score(y_true, y_pred, average="weighted", zero_division=0)) * 100.0
@@ -290,7 +278,6 @@ class DeepfakeModelEvaluator:
 
         cm = confusion_matrix(y_true, y_pred).tolist()
 
-        # Category Summaries
         cat_summaries: Dict[str, CategoryEvaluationSummary] = {}
         weaknesses: List[str] = []
 
@@ -318,12 +305,9 @@ class DeepfakeModelEvaluator:
                 note = "Moderate generalization; occasional misclassifications observed under boundary conditions."
             else:
                 status = "STRUGGLING"
-                note = (
-                    "Model fails to generalize to this forgery type due to distribution mismatch with RVF10K StyleGAN training data."
-                )
+                note = "Model fails to generalize to this forgery type due to distribution mismatch with RVF10K StyleGAN training data."
                 weaknesses.append(
-                    f"Struggles with {category_display_names.get(cat_id, cat_id)} (Accuracy: {cat_acc:.1f}%). "
-                    "The model lacks exposure to this specific manipulation signature during training."
+                    f"Struggles with {category_display_names.get(cat_id, cat_id)} (Accuracy: {cat_acc:.1f}%)."
                 )
 
             cat_summaries[cat_id] = CategoryEvaluationSummary(
@@ -337,13 +321,11 @@ class DeepfakeModelEvaluator:
                 analysis_notes=note,
             )
 
-        # Retraining Recommendations
         retraining_recommendations = [
-            "1. Multi-Domain Dataset Integration: Expand training beyond RVF10K (StyleGAN) to include FaceForensics++ (Deepfakes, FaceSwap, Face2Face, NeuralTextures) and Celeb-DF v2.",
-            "2. Diffusion Model Coverage: Incorporate DiffusionDB and Midjourney synthetic portraits to prevent false negatives on modern generative architectures.",
-            "3. Boundary Blending Augmentation: Implement online simulated face-swap blending (e.g. Poisson blending, alpha feathering) during training to teach the classifier boundary seam artifacts.",
-            "4. Dynamic JPEG Compression Augmentation: Apply random JPEG quality degradation (Q in [40, 95]) during training so compressed real portraits are not misclassified.",
-            "5. Hard Example Mining: Re-train with focal loss or curriculum learning on borderline samples where the classifier currently outputs overconfident false REAL verdicts.",
+            "1. Multi-Domain Dataset Integration: Expand training beyond RVF10K (StyleGAN) to include FaceForensics++ and Celeb-DF v2.",
+            "2. Diffusion Model Coverage: Incorporate DiffusionDB and Midjourney synthetic portraits.",
+            "3. Boundary Blending Augmentation: Implement online simulated face-swap blending.",
+            "4. Dynamic JPEG Compression Augmentation: Apply random JPEG quality degradation.",
         ]
 
         report = ComprehensiveEvaluationReport(
@@ -361,14 +343,11 @@ class DeepfakeModelEvaluator:
             retraining_recommendations=retraining_recommendations,
         )
 
-        # Save JSON Report
         report_json_path = out_path / "evaluation_report.json"
         with open(report_json_path, "w", encoding="utf-8") as f:
             json.dump(report.to_dict(), f, indent=2)
 
-        # Plot & Save Confusion Matrix
         self._plot_confusion_matrix(cm, out_path / "evaluation_confusion_matrix.png")
-
         print(f"[INFO] Evaluation complete. Report exported to: {report_json_path}")
         return report
 

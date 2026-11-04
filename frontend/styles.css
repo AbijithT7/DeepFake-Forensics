@@ -1,0 +1,836 @@
+/* ==========================================================================
+   DeepFake Forensics: Modern, Clean, Intuitive Frontend Styles
+   ========================================================================== */
+
+:root {
+    --bg-page: #f8fafc;
+    --card-bg: #ffffff;
+    --card-border: #e2e8f0;
+    --card-border-focus: #3b82f6;
+
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+
+    --primary-blue: #2563eb;
+    --primary-blue-hover: #1d4ed8;
+    --primary-blue-subtle: #eff6ff;
+
+    /* Verdict Colors */
+    --real-color: #10b981;
+    --real-bg: #ecfdf5;
+    --real-border: #a7f3d0;
+    --real-text: #065f46;
+
+    --fake-color: #ef4444;
+    --fake-bg: #fef2f2;
+    --fake-border: #fecaca;
+    --fake-text: #991b1b;
+
+    --inconclusive-color: #f59e0b;
+    --inconclusive-bg: #fffbeb;
+    --inconclusive-border: #fde68a;
+    --inconclusive-text: #92400e;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-full: 9999px;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+.app-layout {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 32px 20px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* ==========================================================================
+   Header
+   ========================================================================== */
+
+.app-header {
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.branding {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.brand-icon {
+    font-size: 2.2rem;
+    line-height: 1;
+}
+
+.brand-text h1 {
+    font-size: 1.65rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.system-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-full);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #cbd5e1;
+}
+
+.status-dot.online {
+    background-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.status-dot.offline {
+    background-color: #ef4444;
+}
+
+/* ==========================================================================
+   Alert Banners
+   ========================================================================== */
+
+.alert {
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.9rem;
+}
+
+.alert-error {
+    background-color: var(--fake-bg);
+    border: 1px solid var(--fake-border);
+    color: var(--fake-text);
+}
+
+.alert-icon {
+    font-size: 1.2rem;
+}
+
+.alert-message {
+    flex: 1;
+}
+
+.alert-close {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: currentColor;
+    opacity: 0.7;
+}
+
+.alert-close:hover {
+    opacity: 1;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ==========================================================================
+   Card Structure & Step Numbers
+   ========================================================================== */
+
+.card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 24px;
+    margin-bottom: 24px;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.step-card {
+    position: relative;
+}
+
+.step-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.step-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background-color: var(--primary-blue);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.step-info h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.25;
+}
+
+.step-info p {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* ==========================================================================
+   STEP 1: Upload Dropzone
+   ========================================================================== */
+
+.dropzone {
+    border: 2px dashed #cbd5e1;
+    border-radius: var(--radius-md);
+    padding: 32px 20px;
+    text-align: center;
+    background-color: #fafbfc;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.dropzone:hover, .dropzone.dragover {
+    border-color: var(--primary-blue);
+    background-color: var(--primary-blue-subtle);
+}
+
+.file-input {
+    display: none;
+}
+
+.upload-icon-circle {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 16px auto;
+    background-color: #ffffff;
+    border: 1px solid var(--card-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-blue);
+    box-shadow: var(--shadow-sm);
+}
+
+.dropzone-main-text {
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.browse-link {
+    background: none;
+    border: none;
+    color: var(--primary-blue);
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: inherit;
+    font-family: inherit;
+}
+
+.browse-link:hover {
+    color: var(--primary-blue-hover);
+}
+
+.dropzone-sub-text {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+/* Sample Buttons */
+.samples-wrapper {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.samples-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.samples-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.sample-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background-color: #ffffff;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-full);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.sample-btn:hover {
+    border-color: #94a3b8;
+    background-color: #f1f5f9;
+    color: var(--text-primary);
+}
+
+.sample-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.sample-dot.real { background-color: var(--real-color); }
+.sample-dot.fake { background-color: var(--fake-color); }
+
+/* Upload Preview Box */
+.preview-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    cursor: default;
+}
+
+.preview-img-container {
+    max-width: 320px;
+    max-height: 280px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--card-border);
+    background-color: #000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preview-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.preview-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 460px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.file-info-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.file-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-size {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.preview-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-decoration: none;
+}
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+}
+
+.btn-primary {
+    background-color: var(--primary-blue);
+    color: #ffffff;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-blue-hover);
+}
+
+.btn-secondary {
+    background-color: #ffffff;
+    border: 1px solid var(--card-border);
+    color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+    background-color: #f1f5f9;
+    color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Loading State Card
+   ========================================================================== */
+
+.loading-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 40px 24px;
+    text-align: center;
+    margin-bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-sm);
+}
+
+.loader-spinner {
+    width: 44px;
+    height: 44px;
+    border: 4px solid #e2e8f0;
+    border-top-color: var(--primary-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 16px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-text-group h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.loading-text-group p {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* ==========================================================================
+   STEP 2: Grad-CAM Explainability Section
+   ========================================================================== */
+
+.gradcam-card {
+    border-left: 4px solid var(--primary-blue);
+}
+
+.gradcam-faces-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.face-gradcam-block {
+    background-color: #fafbfc;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+}
+
+.face-gradcam-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.face-index-tag {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.face-mini-badge {
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.face-mini-badge.REAL {
+    background-color: var(--real-bg);
+    color: var(--real-text);
+    border: 1px solid var(--real-border);
+}
+
+.face-mini-badge.FAKE {
+    background-color: var(--fake-bg);
+    color: var(--fake-text);
+    border: 1px solid var(--fake-border);
+}
+
+.face-mini-badge.INCONCLUSIVE {
+    background-color: var(--inconclusive-bg);
+    color: var(--inconclusive-text);
+    border: 1px solid var(--inconclusive-border);
+}
+
+/* 3-Column Grad-CAM Visual Display */
+.gradcam-visual-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+    .gradcam-visual-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.visual-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #ffffff;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+}
+
+.visual-item-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.visual-frame {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background-color: #000000;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.visual-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.2s ease;
+}
+
+.visual-frame img:hover {
+    transform: scale(1.03);
+}
+
+.visual-item-caption {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+    text-align: center;
+}
+
+/* Grad-CAM Heatmap Legend */
+.gradcam-legend-bar {
+    background-color: #ffffff;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.legend-spectrum {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.spectrum-track {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, #30123b, #4682b4, #2cf596, #e1e927, #e13300, #7a0403);
+}
+
+/* ==========================================================================
+   STEP 3: Verdict Result Section (Fake or Not Fake)
+   ========================================================================== */
+
+.result-card {
+    border-left: 4px solid var(--text-muted);
+}
+
+.result-card.verdict-fake {
+    border-left-color: var(--fake-color);
+}
+
+.result-card.verdict-real {
+    border-left-color: var(--real-color);
+}
+
+.result-card.verdict-inconclusive {
+    border-left-color: var(--inconclusive-color);
+}
+
+/* Large Verdict Banner */
+.verdict-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-radius: var(--radius-md);
+    background-color: #f1f5f9;
+    border: 1px solid var(--card-border);
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+/* Required by test_13_static_asset_serving */
+.outcome-badge {
+    display: inline-block;
+    padding: 10px 24px;
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    border-radius: var(--radius-md);
+    text-transform: uppercase;
+}
+
+.outcome-badge.REAL {
+    background-color: var(--real-bg);
+    color: var(--real-text);
+    border: 2px solid var(--real-border);
+}
+
+.outcome-badge.FAKE {
+    background-color: var(--fake-bg);
+    color: var(--fake-text);
+    border: 2px solid var(--fake-border);
+}
+
+.outcome-badge.INCONCLUSIVE {
+    background-color: var(--inconclusive-bg);
+    color: var(--inconclusive-text);
+    border: 2px solid var(--inconclusive-border);
+}
+
+.verdict-score-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.verdict-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.verdict-score {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1.1;
+}
+
+.score-type-note {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* Probability Bar */
+.probability-box {
+    margin-bottom: 20px;
+}
+
+.probability-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 0.88rem;
+}
+
+.prob-tag.real {
+    color: var(--real-text);
+}
+
+.prob-tag.fake {
+    color: var(--fake-text);
+}
+
+.prob-track {
+    display: flex;
+    height: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #e2e8f0;
+}
+
+.prob-fill {
+    height: 100%;
+    transition: width 0.5s ease;
+}
+
+.real-fill {
+    background-color: var(--real-color);
+}
+
+.fake-fill {
+    background-color: var(--fake-color);
+}
+
+/* Forensic Explanation Callout */
+.forensic-explanation {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    background-color: #f8fafc;
+    border: 1px solid var(--card-border);
+    margin-bottom: 24px;
+}
+
+.explanation-icon {
+    font-size: 1.6rem;
+    line-height: 1;
+}
+
+.explanation-body h4 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.explanation-body p {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.results-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* ==========================================================================
+   Footer
+   ========================================================================== */
+
+.app-footer {
+    margin-top: auto;
+    padding-top: 24px;
+    border-top: 1px solid var(--card-border);
+    text-align: center;
+}
+
+.footer-inner p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}

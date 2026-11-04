@@ -47,3 +47,7 @@ outputs/web_sessions/*
 outputs/web_history.json
 outputs/evaluation/
 datasets/evaluation_benchmark/
+outputs/test_crops/
+outputs/diagnostics/
+outputs/v2/
+models/huggingface/

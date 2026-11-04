@@ -1,12 +1,11 @@
-"""Explainability & Interpretability Module (XAI).
+"""Explainability & Interpretability Module (XAI) for EfficientNet-B0.
 
 Provides explainable AI tools for generating attribution maps,
-Grad-CAM heatmaps, occlusion sensitivity maps, and forensic visual evidence.
+Grad-CAM heatmaps, and forensic visual overlays.
 """
 
 from typing import TYPE_CHECKING
 from src.explainability.gradcam import GradCAM, GradCAMResult, find_target_layer
-from src.explainability.occlusion import OcclusionSensitivity, OcclusionResult
 from src.explainability.visualizer import GradCAMVisualizer
 
 if TYPE_CHECKING:
@@ -16,8 +15,6 @@ __all__ = [
     "GradCAM",
     "GradCAMResult",
     "find_target_layer",
-    "OcclusionSensitivity",
-    "OcclusionResult",
     "GradCAMVisualizer",
     "ExplainabilityPipeline",
 ]

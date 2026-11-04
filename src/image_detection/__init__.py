@@ -1,18 +1,14 @@
-"""Image Authenticity Detection Module.
-
-This package contains components for image-level deepfake and manipulation detection,
-including face extraction, CNN backbones, feature extraction, and classification.
+"""
+Image detection package for DeepFake-Forensics.
+Unified on EfficientNet-B0 and SCRFD.
 """
 
-from .model import DeepfakeCNN
+from src.image_detection.efficientnet_model import DeepfakeEfficientNetB0
+from src.image_detection.face_detector import SCRFDFaceDetector
+from src.image_detection.inference import DeepFakeInferenceEngine
 
-__all__ = ["DeepfakeCNN", "predict_image", "load_model", "get_transform", "get_device"]
-
-
-def __getattr__(name):
-    if name in ("predict_image", "load_model", "get_transform", "get_device"):
-        from . import predict
-        return getattr(predict, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
+__all__ = [
+    "DeepfakeEfficientNetB0",
+    "SCRFDFaceDetector",
+    "DeepFakeInferenceEngine",
+]
