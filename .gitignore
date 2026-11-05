@@ -1,7 +1,6 @@
-# ==============================
+# ==============================================================================
 # SECRETS AND CREDENTIALS
-# ==============================
-
+# ==============================================================================
 .env
 .env.*
 !.env.example
@@ -14,40 +13,72 @@ secrets.json
 credentials.json
 service-account*.json
 
-# ==============================
-# PYTHON ENVIRONMENT
-# ==============================
-
+# ==============================================================================
+# PYTHON ENVIRONMENT & CACHES
+# ==============================================================================
 .venv/
+.venv*/
 venv/
 env/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+.cache/
+*.cache/
+matplotlib_cache/
 
-# ==============================
+# ==============================================================================
 # EDITOR AND OS FILES
-# ==============================
-
+# ==============================================================================
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+*.bak
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# ==============================
-# GENERATED FORENSIC OUTPUTS & SESSIONS
-# ==============================
+# ==============================================================================
+# BENCHMARKS, DATASETS & EXPERIMENTS (OUT-OF-REPO)
+# ==============================================================================
+evaluation_dataset/
+evaluation_results/
+experiments/
+datasets/evaluation_benchmark/
+datasets/downloaded/
+datasets/raw/*
+!datasets/raw/.gitkeep
+datasets/processed/*
+!datasets/processed/.gitkeep
 
+# Experimental checkpoints (Preserve production checkpoints)
+checkpoints/
+models/experimental/
+*.ckpt
+!models/efficientnet_b0_best.pth
+!models/scrfd_500m.onnx
+models/huggingface/
+
+# ==============================================================================
+# TEMPORARY LOGS, DEBUGGING & RUNTIME ARTIFACTS
+# ==============================================================================
+*.log
+logs/
+*.tmp
+tests/tmp*
+
+# ==============================================================================
+# GENERATED FORENSIC OUTPUTS & SESSIONS
+# ==============================================================================
 outputs/gradcam/*
 !outputs/gradcam/.gitkeep
 outputs/web_sessions/*
 !outputs/web_sessions/.gitkeep
 outputs/web_history.json
 outputs/evaluation/
-datasets/evaluation_benchmark/
 outputs/test_crops/
 outputs/diagnostics/
 outputs/v2/
-models/huggingface/
