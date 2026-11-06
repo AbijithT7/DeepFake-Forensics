@@ -1,0 +1,19 @@
+{
+  "model_id": "LogisticRegression_norm_C=10.0",
+  "feature_extractor": "facebook/dinov2-base",
+  "feature_dim": 768,
+  "feature_preprocessing": "norm",
+  "confidence_rejection_threshold": 0.45,
+  "unknown_routing_policy": "route_to_unknown_when_low_confidence",
+  "rejection_entropy_threshold": null,
+  "calibrated_probabilities": true,
+  "classes": [
+    "DIFFUSION",
+    "FACE_SWAP",
+    "INPAINTING",
+    "OTHER_SYNTHETIC",
+    "REAL",
+    "STYLEGAN_GAN",
+    "UNKNOWN"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "class_to_idx": {
+    "DIFFUSION": 0,
+    "FACE_SWAP": 1,
+    "INPAINTING": 2,
+    "OTHER_SYNTHETIC": 3,
+    "REAL": 4,
+    "STYLEGAN_GAN": 5,
+    "UNKNOWN": 6
+  },
+  "idx_to_class": {
+    "0": "DIFFUSION",
+    "1": "FACE_SWAP",
+    "2": "INPAINTING",
+    "3": "OTHER_SYNTHETIC",
+    "4": "REAL",
+    "5": "STYLEGAN_GAN",
+    "6": "UNKNOWN"
+  },
+  "classes": [
+    "DIFFUSION",
+    "FACE_SWAP",
+    "INPAINTING",
+    "OTHER_SYNTHETIC",
+    "REAL",
+    "STYLEGAN_GAN",
+    "UNKNOWN"
+  ],
+  "unknown_class": "UNKNOWN",
+  "unknown_index": 6
+}

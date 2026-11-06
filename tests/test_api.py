@@ -53,6 +53,9 @@ class TestBackendAPI(unittest.TestCase):
         self.assertIn("status", data)
         self.assertEqual(data["status"], "healthy")
         self.assertTrue(data["primary_model_loaded"])
+        self.assertTrue(data["hybrid_srm_loaded"])
+        self.assertTrue(data["router_loaded"])
+        self.assertEqual(data["router_mode"], "shadow")
         self.assertEqual(data["primary_model"], "EfficientNet-B0")
         self.assertIn("SCRFD", data["face_detector"])
         self.assertIn("device", data)
@@ -68,6 +71,13 @@ class TestBackendAPI(unittest.TestCase):
         self.assertEqual(data["primary_model"]["name"], "EfficientNet-B0")
         self.assertEqual(data["primary_model"]["classes"], ["FAKE", "REAL"])
         self.assertEqual(data["primary_model"]["score_type"], "uncalibrated_model_score")
+        self.assertIn("hybrid_srm_model", data)
+        self.assertEqual(data["hybrid_srm_model"]["name"], "Hybrid SRM Detector (Phase 2)")
+        self.assertEqual(data["hybrid_srm_model"]["status"], "loaded")
+        self.assertIn("router", data)
+        self.assertEqual(data["router"]["status"], "loaded")
+        self.assertEqual(data["router"]["mode"], "shadow")
+        self.assertIn("routing_strategy", data["router"])
 
     def test_03_predict_real_image(self):
         """Test POST /predict/image with a valid real sample."""
@@ -90,6 +100,9 @@ class TestBackendAPI(unittest.TestCase):
         self.assertGreaterEqual(pred["efficientnet"]["score"], 0.90)
         self.assertGreaterEqual(pred["score"], 0.60)
         self.assertIsNotNone(pred["box"])
+        self.assertIn("hybrid_srm", pred)
+        self.assertEqual(pred["hybrid_srm"]["label"], "REAL")
+        self.assertTrue(pred["hybrid_srm"]["loaded"])
 
     def test_04_predict_fake_image(self):
         """Test POST /predict/image with a valid fake sample."""
@@ -107,6 +120,9 @@ class TestBackendAPI(unittest.TestCase):
         self.assertEqual(pred["label"], "INCONCLUSIVE")
         self.assertEqual(pred["fusion"]["reason"], "model_disagreement")
         self.assertEqual(pred["score_type"], "uncalibrated_model_score")
+        self.assertIn("hybrid_srm", pred)
+        self.assertEqual(pred["hybrid_srm"]["label"], "FAKE")
+        self.assertTrue(pred["hybrid_srm"]["loaded"])
 
     def test_05_predict_no_face_image(self):
         """Test POST /predict/image on a landscape with no faces returns INCONCLUSIVE."""

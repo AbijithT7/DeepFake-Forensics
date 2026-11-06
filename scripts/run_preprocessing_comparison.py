@@ -25,7 +25,9 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from src.image_detection.efficientnet_model import DeepfakeEfficientNetB0, get_eval_transform
 from src.image_detection.inference import DeepFakeInferenceEngine
 
-DATASET_TEST_DIR = Path(r"C:\Users\abijith\Downloads\Real vs Fake Faces\Real vs Fake Faces\8020\test")
+import os
+
+DATASET_TEST_DIR = Path(os.environ.get("RVF10K_TEST_DIR", "datasets/rvf10k/test"))
 CHECKPOINT_PATH = Path("models/efficientnet_b0_best.pth")
 OUTPUT_JSON = Path("outputs/preprocessing_comparison.json")
 

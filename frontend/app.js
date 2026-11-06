@@ -371,9 +371,18 @@ document.addEventListener("DOMContentLoaded", () => {
         const overallLabel = primaryPred.label || "INCONCLUSIVE";
         const efficientnet = primaryPred.efficientnet;
         const vit = primaryPred.vit;
+        const communityVit = primaryPred.community_vit;
+        const sbi = primaryPred.sbi;
+        const hybridSrm = primaryPred.hybrid_srm;
         const fusion = primaryPred.fusion || {
             label: overallLabel,
             score: primaryPred.score,
+            reason: primaryPred.reason
+        };
+        const combined = primaryPred.combined_result || {
+            label: overallLabel,
+            consensus: "inconclusive",
+            votes: { REAL: 0, FAKE: 0 },
             reason: primaryPred.reason
         };
 
@@ -398,7 +407,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const modelCard = (name, result, detail) => {
-            if (!result) {
+            if (!result || result.loaded === false) {
                 return `<article class="model-diagnostic unavailable">
                     <div class="model-diagnostic-header"><strong>${name}</strong><span>UNAVAILABLE</span></div>
                     <p>${detail}</p>
@@ -420,16 +429,125 @@ document.addEventListener("DOMContentLoaded", () => {
             </article>`;
         };
 
+        const consensusTag = (combined.consensus || "inconclusive").replace(/_/g, " ").toUpperCase();
+        const chipsHtml = Object.entries(combined.qualifying_votes || {}).map(([mName, vLabel]) => {
+            const displayNames = {
+                efficientnet: "EffNet-B0",
+                vit: "HF-ViT",
+                community_vit: "Community-ViT",
+                sbi: "SBI-B4",
+                hybrid_srm: "Hybrid-SRM"
+            };
+            return `<span class="vote-chip ${vLabel}">${displayNames[mName] || mName}: ${vLabel}</span>`;
+        }).join(" ");
+
+        const shadowRouting = primaryPred.shadow_routing || data.shadow_routing;
+        let shadowRoutingHtml = "";
+        if (shadowRouting) {
+            const routedType = shadowRouting.image_type || "UNKNOWN";
+            const routerConf = shadowRouting.router_confidence != null ?
+                `${(Number(shadowRouting.router_confidence) * 100).toFixed(1)}%` : "N/A";
+            const isRejected = shadowRouting.is_rejected;
+            const rejectionStatus = isRejected ?
+                `Rejected (${shadowRouting.rejection_reason || "low confidence"})` :
+                "Accepted (routed)";
+            const selectedSpecialists = shadowRouting.selected_specialists || [];
+            const specialistChips = selectedSpecialists.map(s =>
+                `<span class="specialist-chip active"><span class="chip-dot"></span>${s}</span>`
+            ).join(" ") || "<span>None selected</span>";
+
+            const shadowVerdict = shadowRouting.shadow_verdict || {};
+            const shadowLabel = shadowVerdict.label || "INCONCLUSIVE";
+            const shadowConsensus = (shadowVerdict.consensus || "inconclusive").replace(/_/g, " ").toUpperCase();
+            const productionLabel = overallLabel;
+            const verdictsMatch = shadowRouting.verdicts_match;
+            const alignmentHtml = verdictsMatch ?
+                `✅ <strong>Verdict Match:</strong> Shadow routed verdict (${shadowLabel}) aligns with production verdict (${productionLabel}).` :
+                `⚠️ <strong>Verdict Discrepancy:</strong> Shadow routed verdict is ${shadowLabel}, while authoritative production verdict is ${productionLabel}.`;
+
+            shadowRoutingHtml = `
+                <div class="router-shadow-diagnostic">
+                    <div class="model-diagnostic-header">
+                        <div class="router-header-title">
+                            <strong>Image-Type Router</strong>
+                            <span class="shadow-mode-pill">SHADOW MODE</span>
+                        </div>
+                        <span class="router-type-badge ${routedType}">${routedType}</span>
+                    </div>
+
+                    <div class="router-meta-grid">
+                        <div class="router-meta-item">
+                            <span class="router-meta-label">Predicted Typology</span>
+                            <strong class="router-meta-val">${routedType}</strong>
+                        </div>
+                        <div class="router-meta-item">
+                            <span class="router-meta-label">Router Confidence</span>
+                            <strong class="router-meta-val">${routerConf}</strong>
+                        </div>
+                        <div class="router-meta-item">
+                            <span class="router-meta-label">Rejection Status</span>
+                            <strong class="router-meta-val">${rejectionStatus}</strong>
+                        </div>
+                    </div>
+
+                    <div class="router-specialists-section">
+                        <span class="router-section-label">Selected Specialist Detectors (${selectedSpecialists.length}):</span>
+                        <div class="specialist-chips">
+                            ${specialistChips}
+                        </div>
+                    </div>
+
+                    <div class="shadow-comparison-section">
+                        <div class="comparison-row">
+                            <span>Hypothetical Routed Verdict:</span>
+                            <span class="shadow-verdict-badge ${shadowLabel}">${shadowLabel} (${shadowConsensus})</span>
+                        </div>
+                        <div class="comparison-row">
+                            <span>Production Authoritative Verdict:</span>
+                            <span class="production-verdict-badge ${productionLabel}">${productionLabel}</span>
+                        </div>
+                        <div class="comparison-alignment">
+                            ${alignmentHtml}
+                        </div>
+                    </div>
+
+                    <div class="shadow-isolation-notice">
+                        🛡️ <strong>Shadow Mode Active:</strong> Input typology is classified with frozen DINOv2 embeddings to evaluate specialist routing policies in passive mode. Existing 5-model inference and production verdict remain 100% authoritative and unchanged.
+                    </div>
+                </div>
+            `;
+        }
+
         modelDiagnostics.innerHTML = `
-            ${modelCard("EfficientNet-B0", efficientnet, "Same SCRFD crop &middot; 224&times;224 RGB &middot; ImageNet normalization")}
-            ${modelCard("ViT", vit, "Same SCRFD crop &middot; ViTImageProcessor preprocessing")}
+            ${modelCard("EfficientNet-B0 (Primary)", efficientnet, "SCRFD crop &middot; 224&times;224 &middot; ImageNet norm &middot; FaceForensics++")}
+            ${modelCard("ViT-v2 (Secondary)", vit, "SCRFD crop &middot; ViTImageProcessor &middot; General artifacts")}
+            ${modelCard("Community Forensics ViT", communityVit, "SCRFD crop &middot; 384&times;384 CLIP norm &middot; 4,800+ generators (CVPR 2025)")}
+            ${modelCard("SBI EfficientNet-B4", sbi, "SCRFD crop &middot; 380&times;380 [0, 1] scaling &middot; Self-Blended Images (CVPR 2022)")}
+            ${modelCard("Hybrid SRM (EffNet-B4 + Xception)", hybridSrm, "SCRFD crop &middot; 224&times;224 ImageNet norm &middot; Dual-stream spatial/frequency (140k Faces)")}
+            
+            ${shadowRoutingHtml}
+
+            <div class="combined-diagnostic ${combined.consensus || "inconclusive"}">
+                <div class="model-diagnostic-header">
+                    <strong>Multi-Model Combined Assessment</strong>
+                    <span class="model-label ${combined.label || "INCONCLUSIVE"}">${combined.label || "INCONCLUSIVE"} (${consensusTag})</span>
+                </div>
+                <div class="vote-chips">
+                    ${chipsHtml || '<span>No qualifying votes</span>'}
+                </div>
+                <p><strong>Consensus:</strong> ${combined.reason || "Evaluating multiple models..."}</p>
+                <div class="calibration-notice">
+                    ⚠️ <strong>Uncalibrated score warning:</strong> Raw probability scores are not directly comparable across disparate architectures. Model scores reflect specialized training domains (e.g. boundary synthesis artifacts vs. generative model frequency fingerprints). The combined result represents multi-model consensus voting rather than score averaging.
+                </div>
+            </div>
+
             <div class="fusion-diagnostic ${fusion.reason || "agreement"}">
                 <div class="model-diagnostic-header">
-                    <strong>Fusion decision</strong>
+                    <strong>Conservative Fusion Decision (EfficientNet + ViT)</strong>
                     <span class="model-label ${fusion.label || "INCONCLUSIVE"}">${fusion.label || "INCONCLUSIVE"}</span>
                 </div>
                 <p>${readableReason(fusion.reason)}</p>
-                <small>Policy: both models must meet the configured threshold and agree. No fused probability is shown.</small>
+                <small>Policy: both base models must meet the configured threshold and agree. Preserved for backward compatibility.</small>
             </div>
         `;
 

@@ -22,6 +22,7 @@ venv/
 env/
 __pycache__/
 *.py[cod]
+*$py.class
 .pytest_cache/
 .mypy_cache/
 .cache/
@@ -42,7 +43,7 @@ Thumbs.db
 desktop.ini
 
 # ==============================================================================
-# BENCHMARKS, DATASETS & EXPERIMENTS (OUT-OF-REPO)
+# DATASETS & EXPERIMENTS
 # ==============================================================================
 evaluation_dataset/
 evaluation_results/
@@ -54,31 +55,41 @@ datasets/raw/*
 datasets/processed/*
 !datasets/processed/.gitkeep
 
-# Experimental checkpoints (Preserve production checkpoints)
+# Exclude router dataset images while preserving manifest
+datasets/image_type_router/images/
+!datasets/image_type_router/manifest.csv
+
+# ==============================================================================
+# MODEL CHECKPOINTS & DOWNLOAD CACHES
+# ==============================================================================
+# Downloaded HuggingFace model hub caches (auto-downloadable via download_pretrained.py)
+models/huggingface/
+models/community_forensics/
+models/image_type_encoder/.cache/
+models/deepguard/.cache/
+
+# Intermediate feature embeddings (can be regenerated from manifest)
+models/image_type_router/*.npz
+
+# Experimental & scratch checkpoints
 checkpoints/
 models/experimental/
 *.ckpt
-!models/efficientnet_b0_best.pth
-!models/scrfd_500m.onnx
-models/huggingface/
 
 # ==============================================================================
-# TEMPORARY LOGS, DEBUGGING & RUNTIME ARTIFACTS
+# TEMPORARY LOGS, DEBUGGING & RUNTIME SESSIONS
 # ==============================================================================
 *.log
 logs/
 *.tmp
 tests/tmp*
 
-# ==============================================================================
-# GENERATED FORENSIC OUTPUTS & SESSIONS
-# ==============================================================================
 outputs/gradcam/*
 !outputs/gradcam/.gitkeep
 outputs/web_sessions/*
 !outputs/web_sessions/.gitkeep
 outputs/web_history.json
-outputs/evaluation/
-outputs/test_crops/
-outputs/diagnostics/
-outputs/v2/
+outputs/test_crops/*
+!outputs/test_crops/.gitkeep
+outputs/diagnostics/*
+!outputs/diagnostics/.gitkeep

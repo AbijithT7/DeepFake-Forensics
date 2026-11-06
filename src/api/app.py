@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
     """
     Lifespan context manager: loads EfficientNet-B0, ViT, and SCRFD once when server starts.
     """
-    logger.info("Initializing DeepFake Forensic Inference Engine (EfficientNet-B0 + ViT + SCRFD)...")
+    logger.info("Initializing DeepFake Forensic Inference Engine (EfficientNet-B0 + ViT + CommunityForensics + SBI + Hybrid SRM + SCRFD)...")
     engine = DeepFakeInferenceEngine(auto_load=True)
     app.state.engine = engine
     logger.info(
@@ -151,6 +151,13 @@ async def health_check(engine: DeepFakeInferenceEngine = Depends(get_engine)):
         status=overall_status,
         primary_model_loaded=is_primary_ready,
         secondary_model_loaded=engine.secondary_model is not None,
+        community_vit_loaded=engine.community_vit_model is not None,
+        sbi_loaded=engine.sbi_model is not None,
+        hybrid_srm_loaded=engine.hybrid_srm_model is not None,
+        router_loaded=engine.image_type_router is not None,
+        router_mode="shadow" if engine.shadow_mode else "production",
+        routing_policy=getattr(engine, "routing_policy", "safeguard"),
+        safeguard_confidence_threshold=getattr(engine, "safeguard_confidence_threshold", 0.85),
         primary_model="EfficientNet-B0",
         face_detector="SCRFD (ONNX)",
         device=str(engine.device),
@@ -167,7 +174,7 @@ async def health_check(engine: DeepFakeInferenceEngine = Depends(get_engine)):
 async def models_info(engine: DeepFakeInferenceEngine = Depends(get_engine)):
     """
     Returns architecture metadata, checkpoint path, resolution requirements,
-    and output classification schema for the EfficientNet-B0 classifier.
+    and output classification schema for all active classifiers.
     """
     return ModelsInfoResponseSchema(
         primary_model=ModelDetailSchema(
@@ -184,6 +191,66 @@ async def models_info(engine: DeepFakeInferenceEngine = Depends(get_engine)):
                 "Evaluates strictly isolated, validated face crops."
             ),
         ),
+        secondary_model=ModelDetailSchema(
+            name="ViT-v2 (Hugging Face)",
+            checkpoint="prithivMLmods/Deep-Fake-Detector-v2-Model",
+            status="loaded" if engine.secondary_model is not None else "unavailable",
+            input_resolution="224x224",
+            normalization="ViTImageProcessor default normalization",
+            classes=["FAKE", "REAL"],
+            score_type="uncalibrated_model_score",
+            description="Vision Transformer fine-tuned for generic deepfake artifact recognition.",
+        ),
+        community_vit_model=ModelDetailSchema(
+            name="Community Forensics ViT (CVPR 2025)",
+            checkpoint="buildborderless/CommunityForensics-DeepfakeDet-ViT",
+            status="loaded" if engine.community_vit_model is not None else "unavailable",
+            input_resolution="384x384 (shortest-edge 440 + center-crop 384)",
+            normalization="CLIP normalization (mean=[0.4815, 0.4578, 0.4082], std=[0.2686, 0.2613, 0.2758])",
+            classes=["FAKE", "REAL"],
+            score_type="uncalibrated_model_score",
+            description="ViT-Small trained on 2.7M images across 4,803 generative models for robust generalized synthetic image detection.",
+        ),
+        sbi_model=ModelDetailSchema(
+            name="SBI EfficientNet-B4 (CVPR 2022)",
+            checkpoint=str(PROJECT_ROOT / "models" / "sbi" / "FFraw.tar"),
+            status="loaded" if engine.sbi_model is not None else "unavailable",
+            input_resolution="380x380",
+            normalization="[0, 1] float scaling (raw / 255.0)",
+            classes=["FAKE", "REAL"],
+            score_type="uncalibrated_model_score",
+            description="EfficientNet-B4 trained on Self-Blended Images (SBIs) targeting subtle facial synthesis blending boundaries.",
+        ),
+        hybrid_srm_model=ModelDetailSchema(
+            name="Hybrid SRM Detector (Phase 2)",
+            checkpoint="AdityaManojShinde/deepfake-detector (deepfake_detector_phase2.pth)",
+            status="loaded" if engine.hybrid_srm_model is not None else "unavailable",
+            input_resolution="224x224",
+            normalization="ImageNet (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])",
+            classes=["FAKE", "REAL"],
+            score_type="uncalibrated_model_score",
+            description=(
+                "Dual-stream CNN combining spatial EfficientNet-B4 and SRM frequency "
+                "residual Xception stream trained on 140k faces (StyleGAN2 vs FFHQ)."
+            ),
+        ),
+        router={
+            "status": "loaded" if engine.image_type_router is not None else "unavailable",
+            "mode": "shadow" if engine.shadow_mode else "production",
+            "backbone": "DINOv2 (facebook/dinov2-base, frozen 768-d)",
+            "classifier": "LogisticRegression (L2, C=10.0)",
+            "classes": [
+                "REAL",
+                "STYLEGAN_GAN",
+                "DIFFUSION",
+                "FACE_SWAP",
+                "INPAINTING",
+                "OTHER_SYNTHETIC",
+                "UNKNOWN",
+            ],
+            "rejection_threshold": 0.45,
+            "routing_strategy": engine.get_specialist_routing_map(),
+        },
         default_model="efficientnet",
         face_detector="SCRFD",
         device=str(engine.device),

@@ -47,6 +47,7 @@ class TestInferenceEngine(unittest.TestCase):
         self.assertTrue(self.engine.is_ready)
         self.assertIsInstance(self.engine.primary_model, DeepfakeEfficientNetB0)
         self.assertTrue(self.engine.detector.is_available)
+        self.assertIsNotNone(self.engine.hybrid_srm_model)
 
         expected_device_type = "cuda" if torch.cuda.is_available() else "cpu"
         self.assertEqual(self.engine.device.type, expected_device_type)
@@ -70,6 +71,9 @@ class TestInferenceEngine(unittest.TestCase):
         self.assertEqual(len(pred.box), 4)
         self.assertIn("REAL", pred.probabilities)
         self.assertIn("FAKE", pred.probabilities)
+        self.assertIsNotNone(pred.hybrid_srm)
+        self.assertEqual(pred.hybrid_srm["label"], "REAL")
+        self.assertTrue(pred.hybrid_srm["loaded"])
 
     def test_03_valid_fake_image(self):
         """Verify disagreement is reported instead of forcing a fake verdict."""
@@ -82,6 +86,9 @@ class TestInferenceEngine(unittest.TestCase):
         self.assertEqual(pred.label, "INCONCLUSIVE")
         self.assertEqual(pred.fusion["reason"], "model_disagreement")
         self.assertEqual(pred.score_type, "uncalibrated_model_score")
+        self.assertIsNotNone(pred.hybrid_srm)
+        self.assertEqual(pred.hybrid_srm["label"], "FAKE")
+        self.assertTrue(pred.hybrid_srm["loaded"])
 
     def test_04_no_face_image(self):
         """Verify no-face images return INCONCLUSIVE without failing."""
@@ -172,6 +179,16 @@ class TestInferenceEngine(unittest.TestCase):
         self.assertIsNotNone(payload["target_layer"])
         self.assertIn(payload["predicted_class"], ("FAKE", "REAL"))
         self.assertIn(payload["predicted_class_idx"], (0, 1))
+
+    def test_10_hybrid_srm_consensus_integration(self):
+        """Verify fifth model (Hybrid SRM) is included in multi-model consensus assessment."""
+        result = self.engine.predict_image(self.real_image_path)
+        pred = result.predictions[0]
+        self.assertIsNotNone(pred.hybrid_srm)
+        self.assertTrue(pred.hybrid_srm["loaded"])
+        self.assertIn("qualifying_votes", pred.combined_result)
+        self.assertIn("hybrid_srm", pred.combined_result["qualifying_votes"])
+        self.assertEqual(pred.combined_result["qualifying_votes"]["hybrid_srm"], "REAL")
 
 
 if __name__ == "__main__":

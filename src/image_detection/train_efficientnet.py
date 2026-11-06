@@ -45,7 +45,7 @@ from src.image_detection.efficientnet_model import (
     get_train_transform,
 )
 
-DEFAULT_DATASET_PATH = Path(r"C:\Users\abijith\Downloads\Real vs Fake Faces\Real vs Fake Faces\8020")
+DEFAULT_DATASET_PATH = Path(os.environ.get("RVF10K_DATASET_PATH", "datasets/rvf10k"))
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs"
 DEFAULT_CHECKPOINT_DIR = PROJECT_ROOT / "models"
 

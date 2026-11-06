@@ -50,7 +50,10 @@ from src.image_detection.face_detector import (
     crop_face_with_controlled_margin,
     validate_face_quality,
 )
+from src.image_detection.community_forensics_vit import CommunityForensicsViTDetector
+from src.image_detection.hybrid_srm_detector import HybridDeepfakeDetector
 from src.image_detection.predict_efficientnet import load_efficientnet_model
+from src.image_detection.sbi_detector import SBIDetector
 from src.image_detection.vit_detector import ViTDetector
 
 logger = logging.getLogger(__name__)
@@ -58,6 +61,101 @@ logger = logging.getLogger(__name__)
 DEFAULT_PRIMARY_CHECKPOINT = PROJECT_ROOT / "models" / "efficientnet_b0_best.pth"
 DEFAULT_UNCERTAINTY_THRESHOLD = 0.60
 SCORE_TYPE_UNSETTLED = "uncalibrated_model_score"
+
+DEFAULT_SPECIALIST_ROUTING_MAP: Dict[str, List[str]] = {
+    "REAL": ["efficientnet", "vit"],
+    "STYLEGAN_GAN": ["efficientnet", "hybrid_srm"],
+    "DIFFUSION": ["community_vit"],
+    "FACE_SWAP": ["sbi"],
+    "INPAINTING": ["community_vit", "sbi"],
+    "OTHER_SYNTHETIC": ["community_vit"],
+    "UNKNOWN": ["efficientnet", "vit", "community_vit", "sbi", "hybrid_srm"],
+}
+
+DETECTOR_DISPLAY_NAMES: Dict[str, str] = {
+    "efficientnet": "EfficientNet-B0",
+    "vit": "Original ViT",
+    "community_vit": "Community Forensics ViT",
+    "sbi": "SBI EfficientNet-B4",
+    "hybrid_srm": "Hybrid SRM",
+}
+
+DEFAULT_SAFEGUARD_CONFIDENCE_THRESHOLD: float = 0.85
+SAFEGUARD_DETECTOR_GROUP: List[str] = ["efficientnet", "vit", "community_vit"]
+ALL_DETECTORS_GROUP: List[str] = ["efficientnet", "vit", "community_vit", "sbi", "hybrid_srm"]
+
+SAFEGUARD_SPECIALIST_HIGH_CONF_MAP: Dict[str, List[str]] = {
+    "STYLEGAN_GAN": ["efficientnet", "hybrid_srm"],
+    "DIFFUSION": ["community_vit"],
+    "FACE_SWAP": ["sbi", "community_vit"],
+    "INPAINTING": ["community_vit", "sbi"],
+    "OTHER_SYNTHETIC": ["community_vit"],
+}
+
+
+def resolve_safeguard_routing(
+    predicted_type: str,
+    confidence: float,
+    threshold: float = DEFAULT_SAFEGUARD_CONFIDENCE_THRESHOLD,
+    policy: str = "safeguard",
+    legacy_routing_map: Optional[Dict[str, List[str]]] = None,
+) -> Tuple[List[str], str]:
+    """
+    Resolve detector specialists according to the routing policy.
+
+    Policies:
+    - 'safeguard': Confidence gating (< threshold -> safeguard group),
+                   REAL category -> safeguard group,
+                   High-confidence specialists for STYLEGAN, DIFFUSION, FACE_SWAP, INPAINTING, OTHER_SYNTHETIC,
+                   UNKNOWN -> all five detectors.
+    - 'legacy': Direct lookup in specialist_routing_map.
+    - 'all': All five specialists.
+
+    Returns (selected_detector_keys, policy_reason).
+    """
+    if policy == "all":
+        return list(ALL_DETECTORS_GROUP), "all_models_policy"
+
+    if policy == "legacy":
+        routing_map = legacy_routing_map or DEFAULT_SPECIALIST_ROUTING_MAP
+        keys = routing_map.get(predicted_type, list(ALL_DETECTORS_GROUP))
+        return list(keys), f"legacy_routing_{predicted_type}"
+
+    # Safeguard policy:
+    # 8. UNKNOWN: All five detectors
+    if predicted_type == "UNKNOWN":
+        return list(ALL_DETECTORS_GROUP), "unknown_typology_fallback_all_models"
+
+    # 1. If router confidence < threshold:
+    # Use safeguard group: EfficientNet-B0, Original ViT, Community Forensics ViT
+    if confidence < threshold:
+        return (
+            list(SAFEGUARD_DETECTOR_GROUP),
+            f"low_confidence_safeguard (conf={confidence:.4f} < {threshold:.2f})",
+        )
+
+    # 2. If predicted category is REAL:
+    # Use the same safeguard group
+    if predicted_type == "REAL":
+        return (
+            list(SAFEGUARD_DETECTOR_GROUP),
+            f"real_category_safeguard (conf={confidence:.4f} >= {threshold:.2f})",
+        )
+
+    # High confidence synthetic categories (confidence >= threshold):
+    # 3. STYLEGAN_GAN: EfficientNet-B0 + Hybrid SRM
+    # 4. DIFFUSION: Community Forensics ViT
+    # 5. FACE_SWAP: SBI EfficientNet-B4 + Community Forensics ViT
+    # 6. INPAINTING: Community Forensics ViT + SBI
+    # 7. OTHER_SYNTHETIC: Community Forensics ViT
+    if predicted_type in SAFEGUARD_SPECIALIST_HIGH_CONF_MAP:
+        models = SAFEGUARD_SPECIALIST_HIGH_CONF_MAP[predicted_type]
+        return (
+            list(models),
+            f"high_confidence_{predicted_type.lower()} (conf={confidence:.4f} >= {threshold:.2f})",
+        )
+
+    return list(ALL_DETECTORS_GROUP), f"unmapped_category_{predicted_type}_fallback"
 
 
 class InvalidImageError(ValueError):
@@ -81,6 +179,95 @@ def fuse_model_predictions(
     if efficientnet.get("label") != vit.get("label"):
         return {"label": "INCONCLUSIVE", "score": score, "reason": "model_disagreement"}
     return {"label": efficientnet["label"], "score": score, "reason": None}
+
+
+def compute_combined_result(
+    model_predictions: Dict[str, Optional[Dict[str, Any]]],
+    threshold: float = DEFAULT_UNCERTAINTY_THRESHOLD,
+) -> Dict[str, Any]:
+    """
+    Combine predictions across heterogeneous deepfake detectors without assuming score calibration.
+
+    Scores are uncalibrated and non-comparable across disparate architectures:
+    - EfficientNet-B0: FaceForensics++ video compression artifacts
+    - ViT (HF): Vision Transformer token patterns
+    - Community Forensics ViT: 4,800+ generative model / diffusion artifacts
+    - SBI EfficientNet-B4: Self-Blended Image boundary inconsistencies
+    - Hybrid SRM CNN: Spatial EfficientNet-B4 + Steganalysis noise residual Xception (140k faces)
+
+    Instead of averaging raw uncalibrated probabilities, this computes:
+    - Individual model votes (REAL / FAKE) when confidence meets threshold.
+    - Disagreement breakdown.
+    - Consensus level: 'unanimous_fake', 'unanimous_real', 'majority_fake', 'majority_real', 'split_decision', or 'inconclusive'.
+    """
+    valid_votes: Dict[str, str] = {}
+    low_confidence_models: List[str] = []
+    unavailable_models: List[str] = []
+
+    for model_key, pred in model_predictions.items():
+        if not pred or not pred.get("loaded", False):
+            unavailable_models.append(model_key)
+            continue
+        lbl = pred.get("label")
+        scr = pred.get("score")
+        if scr is None or lbl not in ("REAL", "FAKE"):
+            unavailable_models.append(model_key)
+        elif scr < threshold:
+            low_confidence_models.append(model_key)
+        else:
+            valid_votes[model_key] = lbl
+
+    real_count = sum(1 for v in valid_votes.values() if v == "REAL")
+    fake_count = sum(1 for v in valid_votes.values() if v == "FAKE")
+    total_votes = len(valid_votes)
+
+    if total_votes == 0:
+        return {
+            "label": "INCONCLUSIVE",
+            "consensus": "inconclusive",
+            "votes": {"REAL": 0, "FAKE": 0},
+            "total_models": len(model_predictions),
+            "reason": "no_models_exceeded_confidence_threshold",
+            "disclaimer": "Individual model scores are uncalibrated and cannot be directly averaged.",
+            "low_confidence_models": low_confidence_models,
+            "unavailable_models": unavailable_models,
+        }
+
+    if fake_count == total_votes:
+        consensus = "unanimous_fake"
+        combined_label = "FAKE"
+        reason = f"All {total_votes} qualifying models unanimously agreed on FAKE."
+    elif real_count == total_votes:
+        consensus = "unanimous_real"
+        combined_label = "REAL"
+        reason = f"All {total_votes} qualifying models unanimously agreed on REAL."
+    elif fake_count > real_count:
+        consensus = "majority_fake"
+        combined_label = "FAKE"
+        reason = f"Majority vote: {fake_count} model(s) detected FAKE, {real_count} detected REAL."
+    elif real_count > fake_count:
+        consensus = "majority_real"
+        combined_label = "REAL"
+        reason = f"Majority vote: {real_count} model(s) detected REAL, {fake_count} detected FAKE."
+    else:
+        consensus = "split_decision"
+        combined_label = "INCONCLUSIVE"
+        reason = f"Split decision: {real_count} model(s) voted REAL and {fake_count} voted FAKE."
+
+    return {
+        "label": combined_label,
+        "consensus": consensus,
+        "votes": {"REAL": real_count, "FAKE": fake_count},
+        "qualifying_votes": valid_votes,
+        "total_models_evaluated": len(model_predictions),
+        "reason": reason,
+        "disclaimer": (
+            "Model scores are uncalibrated across architectures and training domains. "
+            "Combined result represents consensus voting without raw probability averaging."
+        ),
+        "low_confidence_models": low_confidence_models,
+        "unavailable_models": unavailable_models,
+    }
 
 
 @dataclass
@@ -123,7 +310,12 @@ class FacePrediction:
     gradcam_overlay_base64: Optional[str] = None
     efficientnet: Optional[Dict[str, Any]] = None
     vit: Optional[Dict[str, Any]] = None
+    community_vit: Optional[Dict[str, Any]] = None
+    sbi: Optional[Dict[str, Any]] = None
+    hybrid_srm: Optional[Dict[str, Any]] = None
     fusion: Optional[Dict[str, Any]] = None
+    combined_result: Optional[Dict[str, Any]] = None
+    shadow_routing: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -139,7 +331,12 @@ class FacePrediction:
             "gradcam_overlay_base64": self.gradcam_overlay_base64,
             "efficientnet": self.efficientnet,
             "vit": self.vit,
+            "community_vit": self.community_vit,
+            "sbi": self.sbi,
+            "hybrid_srm": self.hybrid_srm,
             "fusion": self.fusion,
+            "combined_result": self.combined_result,
+            "shadow_routing": self.shadow_routing,
         }
 
 
@@ -154,6 +351,7 @@ class ImageInferenceResult:
     uncertainty_threshold: float
     predictions: List[FacePrediction]
     message: Optional[str] = None
+    shadow_routing: Optional[Dict[str, Any]] = None
 
     @property
     def final_prediction(self) -> FacePrediction:
@@ -168,11 +366,25 @@ class ImageInferenceResult:
                 gradcam_overlay_base64=base.gradcam_overlay_base64,
                 efficientnet=base.efficientnet,
                 vit=base.vit,
+                community_vit=base.community_vit,
+                sbi=base.sbi,
+                hybrid_srm=base.hybrid_srm,
                 fusion=base.fusion,
+                combined_result=base.combined_result,
+                shadow_routing=base.shadow_routing,
             )
         labels = {p.label for p in conclusive}
         if len(labels) != 1:
-            return FacePrediction(0, "INCONCLUSIVE", None, reason="multiple_face_disagreement")
+            base = conclusive[0]
+            return FacePrediction(
+                0, "INCONCLUSIVE", None, reason="multiple_face_disagreement",
+                community_vit=base.community_vit,
+                sbi=base.sbi,
+                hybrid_srm=base.hybrid_srm,
+                fusion={"label": "INCONCLUSIVE", "score": None, "reason": "multiple_face_disagreement"},
+                combined_result={"label": "INCONCLUSIVE", "consensus": "split_decision", "reason": "multiple_face_disagreement"},
+                shadow_routing=base.shadow_routing,
+            )
         score = round(min(p.score for p in conclusive if p.score is not None), 4)
         representative = conclusive[0]
         return FacePrediction(
@@ -182,7 +394,12 @@ class ImageInferenceResult:
             gradcam_overlay_base64=representative.gradcam_overlay_base64,
             efficientnet=representative.efficientnet,
             vit=representative.vit,
+            community_vit=representative.community_vit,
+            sbi=representative.sbi,
+            hybrid_srm=representative.hybrid_srm,
             fusion=representative.fusion,
+            combined_result=representative.combined_result,
+            shadow_routing=representative.shadow_routing,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -190,11 +407,13 @@ class ImageInferenceResult:
             "status": self.status,
             "faces_detected": self.faces_detected,
             "model_name": self.model_name,
+            "checkpoint_path": self.checkpoint_path,
             "execution_device": self.execution_device,
             "uncertainty_threshold": self.uncertainty_threshold,
             "message": self.message,
             "final_prediction": self.final_prediction.to_dict(),
             "predictions": [p.to_dict() for p in self.predictions],
+            "shadow_routing": self.shadow_routing,
         }
 
 
@@ -228,6 +447,11 @@ class DeepFakeInferenceEngine:
         min_face_size: int = DEFAULT_MIN_FACE_SIZE,
         blur_threshold: float = DEFAULT_BLUR_THRESHOLD,
         context_margin: float = DEFAULT_CONTEXT_MARGIN,
+        specialist_routing_map: Optional[Dict[str, List[str]]] = None,
+        shadow_mode: bool = True,
+        load_router: bool = True,
+        routing_policy: str = "safeguard",
+        safeguard_confidence_threshold: float = DEFAULT_SAFEGUARD_CONFIDENCE_THRESHOLD,
     ):
         self.primary_checkpoint = Path(primary_checkpoint or DEFAULT_PRIMARY_CHECKPOINT)
         self.device = device or detect_execution_device()
@@ -235,9 +459,21 @@ class DeepFakeInferenceEngine:
         self.min_face_size = min_face_size
         self.blur_threshold = blur_threshold
         self.context_margin = context_margin
+        self.specialist_routing_map = (
+            dict(specialist_routing_map) if specialist_routing_map is not None
+            else dict(DEFAULT_SPECIALIST_ROUTING_MAP)
+        )
+        self.shadow_mode = shadow_mode
+        self.load_router = load_router
+        self.routing_policy = routing_policy
+        self.safeguard_confidence_threshold = float(safeguard_confidence_threshold)
 
         self.primary_model: Optional[DeepfakeEfficientNetB0] = None
         self.secondary_model: Optional[ViTDetector] = None
+        self.community_vit_model: Optional[CommunityForensicsViTDetector] = None
+        self.sbi_model: Optional[SBIDetector] = None
+        self.hybrid_srm_model: Optional[HybridDeepfakeDetector] = None
+        self.image_type_router: Optional[Any] = None
         self.detector = SCRFDFaceDetector(conf_threshold=self.min_detection_confidence)
         self.crop_artifacts: Dict[int, FaceCropArtifact] = {}
         self.last_received_tensor_shape: Optional[Tuple[int, ...]] = None
@@ -245,10 +481,37 @@ class DeepFakeInferenceEngine:
         if auto_load:
             self.load_models()
 
+    def set_safeguard_confidence_threshold(self, threshold: float) -> None:
+        """Set the confidence threshold for safeguard specialist routing."""
+        if not (0.0 <= threshold <= 1.0):
+            raise ValueError(f"safeguard threshold must be between 0.0 and 1.0, got {threshold}")
+        self.safeguard_confidence_threshold = float(threshold)
+
+    def get_safeguard_confidence_threshold(self) -> float:
+        """Return the active safeguard confidence threshold."""
+        return float(self.safeguard_confidence_threshold)
+
+    def set_routing_policy(self, policy: str) -> None:
+        """Set active routing policy ('safeguard', 'legacy', or 'all')."""
+        if policy not in ("safeguard", "legacy", "all"):
+            raise ValueError(f"Unknown routing policy '{policy}'")
+        self.routing_policy = policy
+
+    def get_routing_policy(self) -> str:
+        """Return the active routing policy."""
+        return self.routing_policy
+
+    def set_specialist_routing_map(self, routing_map: Dict[str, List[str]]) -> None:
+        """Update the specialist routing mapping dynamically."""
+        self.specialist_routing_map = dict(routing_map)
+
+    def get_specialist_routing_map(self) -> Dict[str, List[str]]:
+        """Return the current specialist routing mapping."""
+        return dict(self.specialist_routing_map)
+
     def load_models(self) -> None:
         """
-        Load EfficientNet-B0 classifier into memory once.
-        Reuses existing project loader to avoid duplicate code.
+        Load EfficientNet-B0, ViT, Community Forensics ViT, SBI, Hybrid SRM, and ImageTypeRouter models into memory.
         """
         logger.info("Initializing primary model: EfficientNet-B0")
         self.primary_model, _ = load_efficientnet_model(
@@ -266,10 +529,49 @@ class DeepFakeInferenceEngine:
             self.secondary_model = None
             logger.exception("Failed to load secondary ViT model")
 
+        try:
+            self.community_vit_model = CommunityForensicsViTDetector(device=self.device)
+            logger.info("Loaded Community Forensics ViT detector")
+        except Exception:
+            self.community_vit_model = None
+            logger.exception("Failed to load Community Forensics ViT detector")
+
+        try:
+            self.sbi_model = SBIDetector(device=self.device)
+            logger.info("Loaded SBI EfficientNet-B4 detector")
+        except Exception:
+            self.sbi_model = None
+            logger.exception("Failed to load SBI EfficientNet-B4 detector")
+
+        try:
+            self.hybrid_srm_model = HybridDeepfakeDetector(device=self.device)
+            logger.info("Loaded Hybrid SRM (EfficientNet-B4 + Xception) detector")
+        except Exception:
+            self.hybrid_srm_model = None
+            logger.exception("Failed to load Hybrid SRM detector")
+
+        if self.load_router:
+            try:
+                from src.image_detection.image_type_router import ImageTypeRouter
+                self.image_type_router = ImageTypeRouter(
+                    device=self.device,
+                    local_files_only=True,
+                )
+                logger.info("Loaded ImageTypeRouter (Shadow Mode active)")
+            except Exception:
+                self.image_type_router = None
+                logger.exception("Failed to load ImageTypeRouter")
+
     @property
     def is_ready(self) -> bool:
-        """Check if primary model is loaded and ready for inference."""
-        return self.primary_model is not None and self.secondary_model is not None
+        """Check if models are loaded and ready for inference."""
+        return (
+            self.primary_model is not None
+            and self.secondary_model is not None
+            and self.community_vit_model is not None
+            and self.sbi_model is not None
+            and self.hybrid_srm_model is not None
+        )
 
     def validate_and_read_image(
         self, image_input: Union[str, Path, bytes, io.BytesIO, Image.Image, np.ndarray]
@@ -418,7 +720,48 @@ class DeepFakeInferenceEngine:
             )
 
         # 1. Validate and decode image
-        cv_img, _ = self.validate_and_read_image(image_input)
+        cv_img, pil_img = self.validate_and_read_image(image_input)
+
+        # 1b. Shadow Mode: Route image typology via ImageTypeRouter
+        router_pred = None
+        if self.image_type_router is not None:
+            try:
+                router_pred = self.image_type_router.route_image(pil_img)
+            except Exception as r_err:
+                logger.warning(f"Router inference failed: {r_err}")
+                router_pred = None
+
+        if router_pred is not None:
+            predicted_image_type = router_pred.predicted_class
+            raw_image_type = router_pred.raw_predicted_class
+            router_conf = round(float(router_pred.confidence), 4)
+            is_rejected = router_pred.is_rejected
+            rejection_reason = router_pred.rejection_reason
+            router_probs = {k: round(float(v), 4) for k, v in router_pred.probabilities.items()}
+        else:
+            predicted_image_type = "UNKNOWN"
+            raw_image_type = "UNKNOWN"
+            router_conf = 0.0
+            is_rejected = True
+            rejection_reason = "router_unavailable_or_failed"
+            router_probs = {}
+
+        selected_keys, policy_reason = resolve_safeguard_routing(
+            predicted_type=predicted_image_type,
+            confidence=router_conf,
+            threshold=self.safeguard_confidence_threshold,
+            policy=self.routing_policy,
+            legacy_routing_map=self.specialist_routing_map,
+        )
+        selected_display_names = [DETECTOR_DISPLAY_NAMES.get(k, k) for k in selected_keys]
+        logger.info(
+            "Routing policy '%s' selected specialists %s (reason: %s, predicted: %s, conf: %.4f)",
+            self.routing_policy,
+            selected_keys,
+            policy_reason,
+            predicted_image_type,
+            router_conf,
+        )
 
         # 2. Detect and crop faces using SCRFD
         face_artifacts = self.detect_and_crop_faces(cv_img)
@@ -430,6 +773,34 @@ class DeepFakeInferenceEngine:
         # 3. Case A: No faces detected in image -> INCONCLUSIVE
         if len(face_artifacts) == 0:
             logger.info("No face detected in image; returning INCONCLUSIVE.")
+            shadow_routing_data = {
+                "routing_policy": self.routing_policy,
+                "safeguard_threshold": self.safeguard_confidence_threshold,
+                "policy_reason": policy_reason,
+                "image_type": predicted_image_type,
+                "raw_image_type": raw_image_type,
+                "router_confidence": router_conf,
+                "is_rejected": is_rejected,
+                "rejection_reason": rejection_reason,
+                "router_probabilities": router_probs,
+                "selected_specialists": selected_display_names,
+                "selected_specialist_keys": selected_keys,
+                "shadow_verdict": {
+                    "label": "INCONCLUSIVE",
+                    "consensus": "inconclusive",
+                    "votes": {"REAL": 0, "FAKE": 0},
+                    "total_models": len(selected_keys),
+                    "reason": "no_face_detected",
+                },
+                "production_verdict": {
+                    "label": "INCONCLUSIVE",
+                    "fusion_label": "INCONCLUSIVE",
+                    "combined_consensus_label": "INCONCLUSIVE",
+                    "combined_consensus": "inconclusive",
+                },
+                "verdicts_match": True,
+                "shadow_mode": True,
+            }
             return ImageInferenceResult(
                 status="inconclusive",
                 faces_detected=0,
@@ -451,8 +822,26 @@ class DeepFakeInferenceEngine:
                         face_crop_base64=None,
                         gradcam_heatmap_base64=None,
                         gradcam_overlay_base64=None,
+                        efficientnet=None,
+                        vit=None,
+                        community_vit=None,
+                        sbi=None,
+                        hybrid_srm=None,
+                        fusion={"label": "INCONCLUSIVE", "score": None, "reason": "no_face_detected"},
+                        combined_result={
+                            "label": "INCONCLUSIVE",
+                            "consensus": "inconclusive",
+                            "votes": {"REAL": 0, "FAKE": 0},
+                            "total_models": 5,
+                            "reason": "no_face_detected",
+                            "disclaimer": "Individual model scores are uncalibrated and cannot be directly averaged.",
+                            "low_confidence_models": [],
+                            "unavailable_models": [],
+                        },
+                        shadow_routing=shadow_routing_data,
                     )
                 ],
+                shadow_routing=shadow_routing_data,
             )
 
         # 4. Case B: Faces detected -> process each face crop independently
@@ -467,6 +856,34 @@ class DeepFakeInferenceEngine:
                     f"Face ID {art.face_id} failed quality check: {art.quality_reason}"
                 )
                 face_crop_b64 = pil_to_base64_data_url(art.crop_pil) if art.crop_pil else None
+                face_shadow_routing = {
+                    "routing_policy": self.routing_policy,
+                    "safeguard_threshold": self.safeguard_confidence_threshold,
+                    "policy_reason": policy_reason,
+                    "image_type": predicted_image_type,
+                    "raw_image_type": raw_image_type,
+                    "router_confidence": router_conf,
+                    "is_rejected": is_rejected,
+                    "rejection_reason": rejection_reason,
+                    "router_probabilities": router_probs,
+                    "selected_specialists": selected_display_names,
+                    "selected_specialist_keys": selected_keys,
+                    "shadow_verdict": {
+                        "label": "INCONCLUSIVE",
+                        "consensus": "inconclusive",
+                        "votes": {"REAL": 0, "FAKE": 0},
+                        "total_models": len(selected_keys),
+                        "reason": art.quality_reason,
+                    },
+                    "production_verdict": {
+                        "label": "INCONCLUSIVE",
+                        "fusion_label": "INCONCLUSIVE",
+                        "combined_consensus_label": "INCONCLUSIVE",
+                        "combined_consensus": "inconclusive",
+                    },
+                    "verdicts_match": True,
+                    "shadow_mode": True,
+                }
                 predictions.append(
                     FacePrediction(
                         face_id=art.face_id,
@@ -480,7 +897,23 @@ class DeepFakeInferenceEngine:
                         face_crop_base64=face_crop_b64,
                         gradcam_heatmap_base64=None,
                         gradcam_overlay_base64=None,
+                        efficientnet=None,
+                        vit=None,
+                        community_vit=None,
+                        sbi=None,
+                        hybrid_srm=None,
                         fusion={"label": "INCONCLUSIVE", "score": None, "reason": art.quality_reason},
+                        combined_result={
+                            "label": "INCONCLUSIVE",
+                            "consensus": "inconclusive",
+                            "votes": {"REAL": 0, "FAKE": 0},
+                            "total_models": 5,
+                            "reason": art.quality_reason,
+                            "disclaimer": "Individual model scores are uncalibrated and cannot be directly averaged.",
+                            "low_confidence_models": [],
+                            "unavailable_models": [],
+                        },
+                        shadow_routing=face_shadow_routing,
                     )
                 )
                 continue
@@ -536,6 +969,124 @@ class DeepFakeInferenceEngine:
             score = fusion_result["score"]
             reason = fusion_result["reason"]
 
+            # Community Forensics ViT (CVPR 2025)
+            community_vit_result: Optional[Dict[str, Any]] = None
+            if self.community_vit_model is not None:
+                try:
+                    community_vit_result = dict(self.community_vit_model.predict(art.crop_pil))
+                except Exception as cv_err:
+                    logger.warning(f"Community ViT inference failed for face ID {art.face_id}: {cv_err}")
+                    community_vit_result = {
+                        "label": "INCONCLUSIVE",
+                        "score": None,
+                        "reason": str(cv_err),
+                        "loaded": False,
+                    }
+            else:
+                community_vit_result = {
+                    "label": "INCONCLUSIVE",
+                    "score": None,
+                    "reason": "community_vit_unavailable",
+                    "loaded": False,
+                }
+
+            # SBI EfficientNet-B4 (CVPR 2022)
+            sbi_result: Optional[Dict[str, Any]] = None
+            if self.sbi_model is not None:
+                try:
+                    sbi_result = dict(self.sbi_model.predict(art.crop_pil))
+                except Exception as sbi_err:
+                    logger.warning(f"SBI inference failed for face ID {art.face_id}: {sbi_err}")
+                    sbi_result = {
+                        "label": "INCONCLUSIVE",
+                        "score": None,
+                        "reason": str(sbi_err),
+                        "loaded": False,
+                    }
+            else:
+                sbi_result = {
+                    "label": "INCONCLUSIVE",
+                    "score": None,
+                    "reason": "sbi_model_unavailable",
+                    "loaded": False,
+                }
+
+            # Hybrid SRM Detector (AdityaManojShinde/deepfake-detector)
+            hybrid_srm_result: Optional[Dict[str, Any]] = None
+            if self.hybrid_srm_model is not None:
+                try:
+                    hybrid_srm_result = dict(self.hybrid_srm_model.predict(art.crop_pil))
+                except Exception as srm_err:
+                    logger.warning(f"Hybrid SRM inference failed for face ID {art.face_id}: {srm_err}")
+                    hybrid_srm_result = {
+                        "label": "INCONCLUSIVE",
+                        "score": None,
+                        "reason": str(srm_err),
+                        "loaded": False,
+                    }
+            else:
+                hybrid_srm_result = {
+                    "label": "INCONCLUSIVE",
+                    "score": None,
+                    "reason": "hybrid_srm_model_unavailable",
+                    "loaded": False,
+                }
+
+            # Uncalibrated Multi-Model Combined Consensus
+            all_models_dict = {
+                "efficientnet": efficientnet_result,
+                "vit": vit_result,
+                "community_vit": community_vit_result,
+                "sbi": sbi_result,
+                "hybrid_srm": hybrid_srm_result,
+            }
+            combined_result = compute_combined_result(
+                all_models_dict,
+                threshold=uncertainty_threshold,
+            )
+
+            # Shadow Mode: Evaluate selected specialist consensus without altering production verdict
+            routed_models_dict = {
+                k: all_models_dict[k]
+                for k in selected_keys
+                if k in all_models_dict
+            }
+            shadow_combined_result = compute_combined_result(
+                routed_models_dict,
+                threshold=uncertainty_threshold,
+            )
+
+            face_shadow_routing = {
+                "routing_policy": self.routing_policy,
+                "safeguard_threshold": self.safeguard_confidence_threshold,
+                "policy_reason": policy_reason,
+                "image_type": predicted_image_type,
+                "raw_image_type": raw_image_type,
+                "router_confidence": router_conf,
+                "is_rejected": is_rejected,
+                "rejection_reason": rejection_reason,
+                "router_probabilities": router_probs,
+                "selected_specialists": selected_display_names,
+                "selected_specialist_keys": selected_keys,
+                "shadow_verdict": {
+                    "label": shadow_combined_result.get("label", "INCONCLUSIVE"),
+                    "consensus": shadow_combined_result.get("consensus", "inconclusive"),
+                    "votes": shadow_combined_result.get("votes", {"REAL": 0, "FAKE": 0}),
+                    "total_models": shadow_combined_result.get("total_models", len(selected_keys)),
+                    "reason": shadow_combined_result.get("reason"),
+                    "low_confidence_models": shadow_combined_result.get("low_confidence_models", []),
+                    "unavailable_models": shadow_combined_result.get("unavailable_models", []),
+                },
+                "production_verdict": {
+                    "label": label,
+                    "fusion_label": fusion_result.get("label", "INCONCLUSIVE") if fusion_result else "INCONCLUSIVE",
+                    "combined_consensus_label": combined_result.get("label", "INCONCLUSIVE"),
+                    "combined_consensus": combined_result.get("consensus", "inconclusive"),
+                },
+                "verdicts_match": (shadow_combined_result.get("label") == label),
+                "shadow_mode": True,
+            }
+
             face_crop_b64 = pil_to_base64_data_url(art.crop_pil) if art.crop_pil else None
             gradcam_heatmap_b64 = None
             gradcam_overlay_b64 = None
@@ -583,7 +1134,12 @@ class DeepFakeInferenceEngine:
                     gradcam_overlay_base64=gradcam_overlay_b64,
                     efficientnet=efficientnet_result,
                     vit=vit_result,
+                    community_vit=community_vit_result,
+                    sbi=sbi_result,
+                    hybrid_srm=hybrid_srm_result,
                     fusion=fusion_result,
+                    combined_result=combined_result,
+                    shadow_routing=face_shadow_routing,
                 )
             )
 
@@ -599,6 +1155,7 @@ class DeepFakeInferenceEngine:
             uncertainty_threshold=uncertainty_threshold,
             message=f"Analyzed {len(face_artifacts)} detected face(s) independently.",
             predictions=predictions,
+            shadow_routing=predictions[0].shadow_routing if predictions else None,
         )
 
     def get_gradcam_payload(

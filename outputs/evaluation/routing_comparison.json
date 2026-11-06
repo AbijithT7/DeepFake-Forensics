@@ -1,0 +1,1138 @@
+{
+  "timestamp": "2026-11-06T09:04:48.279141+00:00",
+  "benchmark_dataset": {
+    "name": "Frozen 250-Image Out-of-Distribution Benchmark",
+    "path": "C:\\Users\\abijith\\Downloads\\DeepFake-Forensics-Evaluation\\evaluation_dataset",
+    "total_images": 250,
+    "classes": [
+      "REAL",
+      "STYLEGAN_GAN",
+      "DIFFUSION",
+      "FACE_SWAP",
+      "INPAINTING"
+    ],
+    "images_per_class": 50
+  },
+  "pipeline_a": {
+    "name": "All-Models Consensus (5 Specialists)",
+    "models": [
+      "efficientnet",
+      "vit",
+      "community_vit",
+      "sbi",
+      "hybrid_srm"
+    ],
+    "metrics": {
+      "total_samples": 250,
+      "coverage": 0.964,
+      "conclusive_count": 241,
+      "inconclusive_count": 9,
+      "strict_accuracy": 0.268,
+      "conclusive_accuracy": 0.27800829875518673,
+      "pred_distribution": {
+        "REAL": 224,
+        "FAKE": 17,
+        "INCONCLUSIVE": 9,
+        "REAL_pct": 89.6,
+        "FAKE_pct": 6.8,
+        "INCONCLUSIVE_pct": 3.6
+      },
+      "fake_metrics": {
+        "precision": 1.0,
+        "recall": 0.085,
+        "f1": 0.1566820276497696,
+        "true_positives": 17,
+        "false_positives": 0
+      },
+      "real_metrics": {
+        "precision": 0.22321428571428573,
+        "recall": 1.0,
+        "f1": 0.36496350364963503,
+        "true_negatives": 50,
+        "false_negatives": 174
+      },
+      "macro_f1": 0.2608227656497023,
+      "balanced_accuracy": 0.5425,
+      "false_real_count": 174,
+      "false_real_rate": 0.87,
+      "confusion_matrix_3x2": {
+        "actual_REAL": {
+          "pred_REAL": 50,
+          "pred_FAKE": 0,
+          "pred_INCONCLUSIVE": 0
+        },
+        "actual_FAKE": {
+          "pred_REAL": 174,
+          "pred_FAKE": 17,
+          "pred_INCONCLUSIVE": 9
+        }
+      },
+      "confusion_matrix_2x2": [
+        [
+          50,
+          0
+        ],
+        [
+          174,
+          17
+        ]
+      ]
+    },
+    "efficiency": {
+      "mean_latency_ms": 1218.06,
+      "total_detector_passes": 1250,
+      "mean_passes_per_image": 5.0
+    }
+  },
+  "pipeline_b": {
+    "name": "DINOv2 Intelligent Routing",
+    "backbone": "DINOv2-base (CLS 768-dim)",
+    "routing_map": {
+      "REAL": [
+        "efficientnet",
+        "vit"
+      ],
+      "STYLEGAN_GAN": [
+        "efficientnet",
+        "hybrid_srm"
+      ],
+      "DIFFUSION": [
+        "community_vit"
+      ],
+      "FACE_SWAP": [
+        "sbi"
+      ],
+      "INPAINTING": [
+        "community_vit",
+        "sbi"
+      ],
+      "OTHER_SYNTHETIC": [
+        "community_vit"
+      ],
+      "UNKNOWN": [
+        "efficientnet",
+        "vit",
+        "community_vit",
+        "sbi",
+        "hybrid_srm"
+      ]
+    },
+    "metrics": {
+      "total_samples": 250,
+      "coverage": 0.832,
+      "conclusive_count": 208,
+      "inconclusive_count": 42,
+      "strict_accuracy": 0.344,
+      "conclusive_accuracy": 0.41346153846153844,
+      "pred_distribution": {
+        "REAL": 157,
+        "FAKE": 51,
+        "INCONCLUSIVE": 42,
+        "REAL_pct": 62.8,
+        "FAKE_pct": 20.4,
+        "INCONCLUSIVE_pct": 16.8
+      },
+      "fake_metrics": {
+        "precision": 0.9803921568627451,
+        "recall": 0.25,
+        "f1": 0.398406374501992,
+        "true_positives": 50,
+        "false_positives": 1
+      },
+      "real_metrics": {
+        "precision": 0.22929936305732485,
+        "recall": 0.72,
+        "f1": 0.3478260869565218,
+        "true_negatives": 36,
+        "false_negatives": 121
+      },
+      "macro_f1": 0.3731162307292569,
+      "balanced_accuracy": 0.485,
+      "false_real_count": 121,
+      "false_real_rate": 0.605,
+      "confusion_matrix_3x2": {
+        "actual_REAL": {
+          "pred_REAL": 36,
+          "pred_FAKE": 1,
+          "pred_INCONCLUSIVE": 13
+        },
+        "actual_FAKE": {
+          "pred_REAL": 121,
+          "pred_FAKE": 50,
+          "pred_INCONCLUSIVE": 29
+        }
+      },
+      "confusion_matrix_2x2": [
+        [
+          36,
+          1
+        ],
+        [
+          121,
+          50
+        ]
+      ]
+    },
+    "efficiency": {
+      "mean_latency_ms": 1018.7,
+      "total_detector_passes": 650,
+      "mean_passes_per_image": 2.6
+    }
+  },
+  "efficiency_comparison": {
+    "latency_reduction_pct": 16.37,
+    "passes_reduction_pct": 48.0
+  },
+  "per_category_performance": {
+    "REAL": {
+      "sample_count": 50,
+      "actual_label": "REAL",
+      "router_accuracy": 0.52,
+      "router_correct_count": 26,
+      "pipeline_a": {
+        "strict_accuracy": 1.0,
+        "conclusive_accuracy": 1.0,
+        "conclusive_coverage": 1.0,
+        "predictions": {
+          "REAL": 50,
+          "FAKE": 0,
+          "INCONCLUSIVE": 0,
+          "REAL_pct": 100.0,
+          "FAKE_pct": 0.0,
+          "INCONCLUSIVE_pct": 0.0
+        }
+      },
+      "pipeline_b": {
+        "strict_accuracy": 0.72,
+        "conclusive_accuracy": 0.973,
+        "conclusive_coverage": 0.74,
+        "predictions": {
+          "REAL": 36,
+          "FAKE": 1,
+          "INCONCLUSIVE": 13,
+          "REAL_pct": 72.0,
+          "FAKE_pct": 2.0,
+          "INCONCLUSIVE_pct": 26.0
+        }
+      },
+      "strict_accuracy_delta": -0.28
+    },
+    "STYLEGAN_GAN": {
+      "sample_count": 50,
+      "actual_label": "FAKE",
+      "router_accuracy": 0.78,
+      "router_correct_count": 39,
+      "pipeline_a": {
+        "strict_accuracy": 0.28,
+        "conclusive_accuracy": 0.3256,
+        "conclusive_coverage": 0.86,
+        "predictions": {
+          "REAL": 29,
+          "FAKE": 14,
+          "INCONCLUSIVE": 7,
+          "REAL_pct": 58.0,
+          "FAKE_pct": 28.0,
+          "INCONCLUSIVE_pct": 14.0
+        }
+      },
+      "pipeline_b": {
+        "strict_accuracy": 0.54,
+        "conclusive_accuracy": 0.75,
+        "conclusive_coverage": 0.72,
+        "predictions": {
+          "REAL": 9,
+          "FAKE": 27,
+          "INCONCLUSIVE": 14,
+          "REAL_pct": 18.0,
+          "FAKE_pct": 54.0,
+          "INCONCLUSIVE_pct": 28.0
+        }
+      },
+      "strict_accuracy_delta": 0.26
+    },
+    "DIFFUSION": {
+      "sample_count": 50,
+      "actual_label": "FAKE",
+      "router_accuracy": 0.36,
+      "router_correct_count": 18,
+      "pipeline_a": {
+        "strict_accuracy": 0.02,
+        "conclusive_accuracy": 0.0204,
+        "conclusive_coverage": 0.98,
+        "predictions": {
+          "REAL": 48,
+          "FAKE": 1,
+          "INCONCLUSIVE": 1,
+          "REAL_pct": 96.0,
+          "FAKE_pct": 2.0,
+          "INCONCLUSIVE_pct": 2.0
+        }
+      },
+      "pipeline_b": {
+        "strict_accuracy": 0.14,
+        "conclusive_accuracy": 0.1522,
+        "conclusive_coverage": 0.92,
+        "predictions": {
+          "REAL": 39,
+          "FAKE": 7,
+          "INCONCLUSIVE": 4,
+          "REAL_pct": 78.0,
+          "FAKE_pct": 14.0,
+          "INCONCLUSIVE_pct": 8.0
+        }
+      },
+      "strict_accuracy_delta": 0.12
+    },
+    "FACE_SWAP": {
+      "sample_count": 50,
+      "actual_label": "FAKE",
+      "router_accuracy": 0.08,
+      "router_correct_count": 4,
+      "pipeline_a": {
+        "strict_accuracy": 0.02,
+        "conclusive_accuracy": 0.02,
+        "conclusive_coverage": 1.0,
+        "predictions": {
+          "REAL": 49,
+          "FAKE": 1,
+          "INCONCLUSIVE": 0,
+          "REAL_pct": 98.0,
+          "FAKE_pct": 2.0,
+          "INCONCLUSIVE_pct": 0.0
+        }
+      },
+      "pipeline_b": {
+        "strict_accuracy": 0.12,
+        "conclusive_accuracy": 0.1277,
+        "conclusive_coverage": 0.94,
+        "predictions": {
+          "REAL": 41,
+          "FAKE": 6,
+          "INCONCLUSIVE": 3,
+          "REAL_pct": 82.0,
+          "FAKE_pct": 12.0,
+          "INCONCLUSIVE_pct": 6.0
+        }
+      },
+      "strict_accuracy_delta": 0.1
+    },
+    "INPAINTING": {
+      "sample_count": 50,
+      "actual_label": "FAKE",
+      "router_accuracy": 0.0,
+      "router_correct_count": 0,
+      "pipeline_a": {
+        "strict_accuracy": 0.02,
+        "conclusive_accuracy": 0.0204,
+        "conclusive_coverage": 0.98,
+        "predictions": {
+          "REAL": 48,
+          "FAKE": 1,
+          "INCONCLUSIVE": 1,
+          "REAL_pct": 96.0,
+          "FAKE_pct": 2.0,
+          "INCONCLUSIVE_pct": 2.0
+        }
+      },
+      "pipeline_b": {
+        "strict_accuracy": 0.2,
+        "conclusive_accuracy": 0.2381,
+        "conclusive_coverage": 0.84,
+        "predictions": {
+          "REAL": 32,
+          "FAKE": 10,
+          "INCONCLUSIVE": 8,
+          "REAL_pct": 64.0,
+          "FAKE_pct": 20.0,
+          "INCONCLUSIVE_pct": 16.0
+        }
+      },
+      "strict_accuracy_delta": 0.18
+    }
+  },
+  "failure_analysis": {
+    "improving_categories": [
+      "STYLEGAN_GAN",
+      "DIFFUSION",
+      "FACE_SWAP",
+      "INPAINTING"
+    ],
+    "degrading_categories": [
+      "REAL"
+    ],
+    "neutral_categories": [],
+    "total_router_misclassifications": 163,
+    "router_overall_accuracy": 0.348,
+    "total_specialist_misses_b": 121,
+    "pipeline_a_succeeds_b_fails_count": 16,
+    "pipeline_b_succeeds_a_fails_count": 35,
+    "router_errors_sample": [
+      {
+        "image_index": 1,
+        "filename": "2650449_1954-02-26_2012.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.9367,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 2,
+        "filename": "44823_1902-09-20_1952.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "REAL",
+        "router_raw": "REAL",
+        "confidence": 0.8443,
+        "is_rejected": false,
+        "selected_specialists": "efficientnet;vit",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 3,
+        "filename": "27131814_1992-06-09_2012.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.6045,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 6,
+        "filename": "5522094_1952-10-13_2011.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.0061,
+        "is_rejected": true,
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 7,
+        "filename": "32069321_1977-03-30_2012.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "router_raw": "STYLEGAN_GAN",
+        "confidence": 0.0043,
+        "is_rejected": true,
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 8,
+        "filename": "14643878_1931-03-09_1963.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.0363,
+        "is_rejected": true,
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 9,
+        "filename": "20913246_1984-11-22_2012.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.0021,
+        "is_rejected": true,
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 11,
+        "filename": "36298298_1992-07-02_2011.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.903,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 12,
+        "filename": "1658989_1961-07-02_2013.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.8508,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 14,
+        "filename": "36753929_1982-09-02_2005.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.8115,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 17,
+        "filename": "10148536_1988-01-15_2007.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.6289,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 18,
+        "filename": "1562935_1987-08-18_2010.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "router_raw": "UNKNOWN",
+        "confidence": 0.3112,
+        "is_rejected": true,
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 21,
+        "filename": "15399725_1973-09-20_2010.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.5818,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 22,
+        "filename": "4493906_1972-03-15_2007.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.5295,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 23,
+        "filename": "9391630_1940-04-27_1964.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.8154,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 24,
+        "filename": "287249_1925-03-25_1989.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "router_raw": "STYLEGAN_GAN",
+        "confidence": 0.0086,
+        "is_rejected": true,
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 25,
+        "filename": "5201709_1949-12-27_2013.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "INPAINTING",
+        "router_raw": "INPAINTING",
+        "confidence": 0.7247,
+        "is_rejected": false,
+        "selected_specialists": "community_vit;sbi",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 26,
+        "filename": "41205353_1946-06-27_1965.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.3485,
+        "is_rejected": true,
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 29,
+        "filename": "45256107_1988-04-14_2011.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "REAL",
+        "router_raw": "REAL",
+        "confidence": 0.6513,
+        "is_rejected": false,
+        "selected_specialists": "efficientnet;vit",
+        "verdict_b": "REAL"
+      },
+      {
+        "image_index": 30,
+        "filename": "2688251_1948-08-02_2006.jpg",
+        "actual_category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "router_raw": "FACE_SWAP",
+        "confidence": 0.6165,
+        "is_rejected": false,
+        "selected_specialists": "sbi",
+        "verdict_b": "REAL"
+      }
+    ],
+    "specialist_misses_sample": [
+      {
+        "image_index": 1,
+        "filename": "2650449_1954-02-26_2012.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 2,
+        "filename": "44823_1902-09-20_1952.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 3,
+        "filename": "27131814_1992-06-09_2012.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 4,
+        "filename": "43478489_1987-06-06_2013.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 5,
+        "filename": "3454142_1984-10-16_2006.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 6,
+        "filename": "5522094_1952-10-13_2011.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "pipeline_b_consensus": "majority_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 7,
+        "filename": "32069321_1977-03-30_2012.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "pipeline_b_consensus": "majority_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 8,
+        "filename": "14643878_1931-03-09_1963.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "pipeline_b_consensus": "majority_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 10,
+        "filename": "331439_1904-03-25_1946.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 12,
+        "filename": "1658989_1961-07-02_2013.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 13,
+        "filename": "3014582_1982-09-28_2015.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 16,
+        "filename": "41615557_1997-01-26_2013.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 18,
+        "filename": "1562935_1987-08-18_2010.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 19,
+        "filename": "38032109_1992-04-18_2015.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 20,
+        "filename": "316130_1938-10-15_1970.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 22,
+        "filename": "4493906_1972-03-15_2007.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 23,
+        "filename": "9391630_1940-04-27_1964.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 24,
+        "filename": "287249_1925-03-25_1989.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "pipeline_b_consensus": "majority_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 26,
+        "filename": "41205353_1946-06-27_1965.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "UNKNOWN",
+        "selected_specialists": "efficientnet;vit;community_vit;sbi;hybrid_srm",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      },
+      {
+        "image_index": 29,
+        "filename": "45256107_1988-04-14_2011.jpg",
+        "category": "DIFFUSION",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "pipeline_b_consensus": "unanimous_real",
+        "pipeline_a_verdict": "REAL"
+      }
+    ],
+    "a_wins_sample": [
+      {
+        "image_index": 77,
+        "filename": "12988833_1984-10-06_2008.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "FAKE",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 102,
+        "filename": "ccd01688e2a7_38032109_1992-04-18_2015.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 105,
+        "filename": "babb9eafb189_4493906_1972-03-15_2007.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 109,
+        "filename": "8c61b9705be0_5201709_1949-12-27_2013.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 111,
+        "filename": "d52e3e01e125_12988833_1984-10-06_2008.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 112,
+        "filename": "e76e41795be2_15321843_1985-08-30_2010.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 115,
+        "filename": "3d2a249caab2_2688251_1948-08-02_2006.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 124,
+        "filename": "980a5ce9c530_36240871_1990-05-29_2013.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 129,
+        "filename": "240fa0009d81_1486987_1932-10-24_2004.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 133,
+        "filename": "99bc744a5548_31157469_1966-07-22_2012.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 139,
+        "filename": "38939_1912-09-29_1995.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 141,
+        "filename": "15155_1917-04-26_2006.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 142,
+        "filename": "10236210_1922-11-20_1987.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 144,
+        "filename": "10932678_1978-12-04_2004.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 148,
+        "filename": "548217_1955-09-09_2006.jpg",
+        "category": "REAL",
+        "actual_label": "REAL",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "REAL",
+        "verdict_b": "INCONCLUSIVE"
+      },
+      {
+        "image_index": 247,
+        "filename": "stylegan_train_56783_31721e3d68c2.jpg",
+        "category": "STYLEGAN_GAN",
+        "actual_label": "FAKE",
+        "router_predicted": "REAL",
+        "selected_specialists": "efficientnet;vit",
+        "verdict_a": "FAKE",
+        "verdict_b": "INCONCLUSIVE"
+      }
+    ],
+    "b_wins_sample": [
+      {
+        "image_index": 11,
+        "filename": "36298298_1992-07-02_2011.jpg",
+        "category": "DIFFUSION",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 14,
+        "filename": "36753929_1982-09-02_2005.jpg",
+        "category": "DIFFUSION",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 15,
+        "filename": "44285_1904-10-21_1956.jpg",
+        "category": "DIFFUSION",
+        "actual_label": "FAKE",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 17,
+        "filename": "10148536_1988-01-15_2007.jpg",
+        "category": "DIFFUSION",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 21,
+        "filename": "15399725_1973-09-20_2010.jpg",
+        "category": "DIFFUSION",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "INCONCLUSIVE",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 27,
+        "filename": "12988833_1984-10-06_2008.jpg",
+        "category": "DIFFUSION",
+        "actual_label": "FAKE",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 51,
+        "filename": "2650449_1954-02-26_2012.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 54,
+        "filename": "43478489_1987-06-06_2013.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 55,
+        "filename": "3454142_1984-10-16_2006.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 58,
+        "filename": "14643878_1931-03-09_1963.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 63,
+        "filename": "3014582_1982-09-28_2015.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 65,
+        "filename": "44285_1904-10-21_1956.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 68,
+        "filename": "1562935_1987-08-18_2010.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 89,
+        "filename": "27682857_1937-12-31_1980.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 93,
+        "filename": "33586744_1987-06-24_2012.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 96,
+        "filename": "19140225_1971-08-06_2012.jpg",
+        "category": "INPAINTING",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "INCONCLUSIVE",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 166,
+        "filename": "1562935_1987-08-18_2010.jpg",
+        "category": "FACE_SWAP",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 177,
+        "filename": "45256107_1988-04-14_2011.jpg",
+        "category": "FACE_SWAP",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 181,
+        "filename": "38455549_1980-11-16_2012.jpg",
+        "category": "FACE_SWAP",
+        "actual_label": "FAKE",
+        "router_predicted": "DIFFUSION",
+        "selected_specialists": "community_vit",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      },
+      {
+        "image_index": 189,
+        "filename": "33586744_1987-06-24_2012.jpg",
+        "category": "FACE_SWAP",
+        "actual_label": "FAKE",
+        "router_predicted": "FACE_SWAP",
+        "selected_specialists": "sbi",
+        "verdict_a": "REAL",
+        "verdict_b": "FAKE"
+      }
+    ]
+  }
+}
