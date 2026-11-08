@@ -1,0 +1,22 @@
+{
+  "active_engine": "v3",
+  "allow_real": false,
+  "preprocessing": {
+    "vit_uncropped": true,
+    "community_vit_uncropped": true,
+    "efficientnet_margin_ratio": 0.15,
+    "sbi_margin_ratio": 0.15,
+    "hybrid_srm_margin_ratio": 0.15
+  },
+  "thresholds": {
+    "efficientnet": 0.9000,
+    "vit": 0.9000,
+    "community_vit": 1.0000,
+    "sbi": 0.9997,
+    "hybrid_srm": 0.9000
+  },
+  "legacy_config": {
+    "uncertainty_threshold": 0.60,
+    "fusion_models": ["efficientnet", "vit"]
+  }
+}
