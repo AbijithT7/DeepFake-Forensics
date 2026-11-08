@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -33,6 +35,7 @@ import torch.nn.functional as F
 from PIL import Image
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_VERDICT_CONFIG_PATH = Path(__file__).resolve().parent / "verdict_config.json"
 
 from src.explainability.gradcam import GradCAM
 from src.explainability.visualizer import GradCAMVisualizer
@@ -161,6 +164,143 @@ def resolve_safeguard_routing(
 class InvalidImageError(ValueError):
     """Raised when an uploaded or specified image cannot be read, decoded, or validated."""
     pass
+
+
+def load_verdict_config(config_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+    """Load verdict configuration JSON with fallback defaults."""
+    cfg_file = Path(config_path or os.environ.get("VERDICT_CONFIG_PATH") or DEFAULT_VERDICT_CONFIG_PATH)
+    if cfg_file.is_file():
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as err:
+            logger.warning("Failed to parse verdict config %s: %s", cfg_file, err)
+    return {
+        "active_engine": "v3",
+        "allow_real": False,
+        "preprocessing": {
+            "vit_uncropped": True,
+            "community_vit_uncropped": True,
+            "efficientnet_margin_ratio": 0.15,
+            "sbi_margin_ratio": 0.15,
+            "hybrid_srm_margin_ratio": 0.15,
+        },
+        "thresholds": {
+            "efficientnet": 0.9000,
+            "vit": 0.9000,
+            "community_vit": 1.0000,
+            "sbi": 0.9997,
+            "hybrid_srm": 0.9000,
+        },
+        "legacy_config": {
+            "uncertainty_threshold": 0.60,
+            "fusion_models": ["efficientnet", "vit"],
+        },
+    }
+
+
+def evaluate_verdict_v3(
+    model_predictions: Dict[str, Optional[Dict[str, Any]]],
+    thresholds: Dict[str, float],
+    allow_real: bool = False,
+) -> Dict[str, Any]:
+    """
+    Verdict Engine v3: Specialist-Any-FAKE decision rule.
+    
+    A. Input availability:
+       - If all specialists unavailable -> INCONCLUSIVE, reason "all_models_unavailable".
+       - Record each unavailable specialist.
+       - One unavailable model does not block remaining available models.
+    B. FAKE decision:
+       - For each available specialist, fires if P(fake_i) >= T_i.
+       - If at least one fires -> FAKE.
+       - Returns triggering models, triggering scores, primary trigger (highest score), thresholds.
+    C. INCONCLUSIVE decision:
+       - If no available specialist crosses threshold -> INCONCLUSIVE, reason "no_high_confidence_fake_signal".
+       - Never emit REAL in v3 (allow_real=False).
+    D. Restrictions:
+       - No weighted voting, no majority voting, no consensus logic, no router influence.
+    """
+    for m, t in thresholds.items():
+        if not (0.0 <= float(t) <= 1.0):
+            raise ValueError(f"Invalid threshold for {m}: {t}. Must be between 0.0 and 1.0.")
+
+    available_scores: Dict[str, float] = {}
+    unavailable_models: List[str] = []
+
+    for m, t in thresholds.items():
+        pred = model_predictions.get(m)
+        if not pred or not pred.get("loaded", False) or pred.get("error"):
+            unavailable_models.append(m)
+            continue
+
+        prob_fake: Optional[float] = None
+        probs = pred.get("probabilities")
+        if probs and "FAKE" in probs:
+            prob_fake = float(probs["FAKE"])
+        elif pred.get("label") is not None and pred.get("score") is not None:
+            if pred.get("label") == "FAKE":
+                prob_fake = float(pred.get("score"))
+            elif pred.get("label") == "REAL":
+                prob_fake = 1.0 - float(pred.get("score"))
+
+        if prob_fake is None:
+            unavailable_models.append(m)
+            continue
+
+        available_scores[m] = round(prob_fake, 4)
+
+    if len(available_scores) == 0:
+        return {
+            "verdict": "INCONCLUSIVE",
+            "reason": "all_models_unavailable",
+            "available_scores": {},
+            "unavailable_models": unavailable_models,
+            "triggering_models": [],
+            "triggering_scores": {},
+            "primary_trigger": None,
+            "thresholds": dict(thresholds),
+            "verdict_engine": "v3",
+            "verdict_source": "specialist_any_fake_v3",
+            "allow_real": allow_real,
+        }
+
+    triggering_models: List[str] = []
+    triggering_scores: Dict[str, float] = {}
+    for m, score in available_scores.items():
+        if score >= thresholds[m]:
+            triggering_models.append(m)
+            triggering_scores[m] = score
+
+    if len(triggering_models) > 0:
+        primary_trigger = max(triggering_models, key=lambda m: (triggering_scores[m], m))
+        return {
+            "verdict": "FAKE",
+            "reason": "specialist_threshold_exceeded",
+            "available_scores": available_scores,
+            "unavailable_models": unavailable_models,
+            "triggering_models": triggering_models,
+            "triggering_scores": triggering_scores,
+            "primary_trigger": primary_trigger,
+            "thresholds": dict(thresholds),
+            "verdict_engine": "v3",
+            "verdict_source": "specialist_any_fake_v3",
+            "allow_real": allow_real,
+        }
+
+    return {
+        "verdict": "INCONCLUSIVE",
+        "reason": "no_high_confidence_fake_signal",
+        "available_scores": available_scores,
+        "unavailable_models": unavailable_models,
+        "triggering_models": [],
+        "triggering_scores": {},
+        "primary_trigger": None,
+        "thresholds": dict(thresholds),
+        "verdict_engine": "v3",
+        "verdict_source": "specialist_any_fake_v3",
+        "allow_real": allow_real,
+    }
 
 
 def fuse_model_predictions(
@@ -316,6 +456,17 @@ class FacePrediction:
     fusion: Optional[Dict[str, Any]] = None
     combined_result: Optional[Dict[str, Any]] = None
     shadow_routing: Optional[Dict[str, Any]] = None
+    # Specialist-Any-FAKE v3 fields:
+    verdict_source: Optional[str] = None
+    verdict_engine: Optional[str] = None
+    verdict_reason: Optional[str] = None
+    available_scores: Optional[Dict[str, float]] = None
+    unavailable_models: Optional[List[str]] = None
+    triggering_models: Optional[List[str]] = None
+    triggering_scores: Optional[Dict[str, float]] = None
+    primary_trigger: Optional[str] = None
+    thresholds: Optional[Dict[str, float]] = None
+    v3_verdict: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -337,6 +488,16 @@ class FacePrediction:
             "fusion": self.fusion,
             "combined_result": self.combined_result,
             "shadow_routing": self.shadow_routing,
+            "verdict_source": self.verdict_source,
+            "verdict_engine": self.verdict_engine,
+            "verdict_reason": self.verdict_reason,
+            "available_scores": self.available_scores,
+            "unavailable_models": self.unavailable_models,
+            "triggering_models": self.triggering_models,
+            "triggering_scores": self.triggering_scores,
+            "primary_trigger": self.primary_trigger,
+            "thresholds": self.thresholds,
+            "v3_verdict": self.v3_verdict,
         }
 
 
@@ -352,10 +513,103 @@ class ImageInferenceResult:
     predictions: List[FacePrediction]
     message: Optional[str] = None
     shadow_routing: Optional[Dict[str, Any]] = None
+    active_verdict_engine: str = "v3"
+    verdict_source: str = "specialist_any_fake_v3"
 
     @property
     def final_prediction(self) -> FacePrediction:
-        """One image verdict: all usable faces must reach the same fused result."""
+        """One image verdict according to the active verdict engine."""
+        if not self.predictions:
+            return FacePrediction(
+                face_id=0,
+                label="INCONCLUSIVE",
+                score=None,
+                reason="no_usable_face",
+                verdict_source=self.verdict_source,
+                verdict_engine=self.active_verdict_engine,
+                verdict_reason="no_usable_face",
+                available_scores={},
+                unavailable_models=[],
+                triggering_models=[],
+                triggering_scores={},
+                primary_trigger=None,
+                thresholds=None,
+            )
+
+        if self.active_verdict_engine == "v3":
+            # Any face detected as FAKE makes the whole image FAKE
+            fake_preds = [p for p in self.predictions if p.label == "FAKE"]
+            if fake_preds:
+                # Representative is the highest-scoring fake prediction
+                winning_pred = max(fake_preds, key=lambda p: (p.score or 0.0))
+                return FacePrediction(
+                    face_id=0,
+                    label="FAKE",
+                    score=winning_pred.score,
+                    reason=winning_pred.reason or "specialist_threshold_exceeded",
+                    face_crop_base64=winning_pred.face_crop_base64,
+                    gradcam_heatmap_base64=winning_pred.gradcam_heatmap_base64,
+                    gradcam_overlay_base64=winning_pred.gradcam_overlay_base64,
+                    efficientnet=winning_pred.efficientnet,
+                    vit=winning_pred.vit,
+                    community_vit=winning_pred.community_vit,
+                    sbi=winning_pred.sbi,
+                    hybrid_srm=winning_pred.hybrid_srm,
+                    fusion=winning_pred.fusion,
+                    combined_result=winning_pred.combined_result,
+                    shadow_routing=winning_pred.shadow_routing,
+                    verdict_source=winning_pred.verdict_source or self.verdict_source,
+                    verdict_engine="v3",
+                    verdict_reason=winning_pred.verdict_reason or winning_pred.reason or "specialist_threshold_exceeded",
+                    available_scores=winning_pred.available_scores,
+                    unavailable_models=winning_pred.unavailable_models,
+                    triggering_models=winning_pred.triggering_models,
+                    triggering_scores=winning_pred.triggering_scores,
+                    primary_trigger=winning_pred.primary_trigger,
+                    thresholds=winning_pred.thresholds,
+                    v3_verdict=winning_pred.v3_verdict,
+                )
+
+            # All predictions are INCONCLUSIVE
+            first_pred = self.predictions[0]
+            # Check reasons across predictions
+            reasons = [p.reason for p in self.predictions if p.reason]
+            if any(r == "no_usable_face" for r in reasons) and all(r in ("no_usable_face", "no_face_detected") or "face" in str(r) for r in reasons):
+                final_reason = "no_usable_face"
+            elif any(r == "all_models_unavailable" for r in reasons):
+                final_reason = "all_models_unavailable"
+            else:
+                final_reason = "no_high_confidence_fake_signal"
+
+            return FacePrediction(
+                face_id=0,
+                label="INCONCLUSIVE",
+                score=None,
+                reason=final_reason,
+                face_crop_base64=first_pred.face_crop_base64,
+                gradcam_heatmap_base64=first_pred.gradcam_heatmap_base64,
+                gradcam_overlay_base64=first_pred.gradcam_overlay_base64,
+                efficientnet=first_pred.efficientnet,
+                vit=first_pred.vit,
+                community_vit=first_pred.community_vit,
+                sbi=first_pred.sbi,
+                hybrid_srm=first_pred.hybrid_srm,
+                fusion=first_pred.fusion,
+                combined_result=first_pred.combined_result,
+                shadow_routing=first_pred.shadow_routing,
+                verdict_source=first_pred.verdict_source or self.verdict_source,
+                verdict_engine="v3",
+                verdict_reason=final_reason,
+                available_scores=first_pred.available_scores,
+                unavailable_models=first_pred.unavailable_models,
+                triggering_models=[],
+                triggering_scores={},
+                primary_trigger=None,
+                thresholds=first_pred.thresholds,
+                v3_verdict=first_pred.v3_verdict,
+            )
+
+        # Legacy 2-model fusion property logic
         conclusive = [p for p in self.predictions if p.label != "INCONCLUSIVE"]
         if not conclusive or len(conclusive) != len(self.predictions):
             base = self.predictions[0]
@@ -372,6 +626,8 @@ class ImageInferenceResult:
                 fusion=base.fusion,
                 combined_result=base.combined_result,
                 shadow_routing=base.shadow_routing,
+                verdict_source=self.verdict_source,
+                verdict_engine=self.active_verdict_engine,
             )
         labels = {p.label for p in conclusive}
         if len(labels) != 1:
@@ -384,6 +640,8 @@ class ImageInferenceResult:
                 fusion={"label": "INCONCLUSIVE", "score": None, "reason": "multiple_face_disagreement"},
                 combined_result={"label": "INCONCLUSIVE", "consensus": "split_decision", "reason": "multiple_face_disagreement"},
                 shadow_routing=base.shadow_routing,
+                verdict_source=self.verdict_source,
+                verdict_engine=self.active_verdict_engine,
             )
         score = round(min(p.score for p in conclusive if p.score is not None), 4)
         representative = conclusive[0]
@@ -400,9 +658,12 @@ class ImageInferenceResult:
             fusion=representative.fusion,
             combined_result=representative.combined_result,
             shadow_routing=representative.shadow_routing,
+            verdict_source=self.verdict_source,
+            verdict_engine=self.active_verdict_engine,
         )
 
     def to_dict(self) -> Dict[str, Any]:
+        final = self.final_prediction
         return {
             "status": self.status,
             "faces_detected": self.faces_detected,
@@ -411,9 +672,18 @@ class ImageInferenceResult:
             "execution_device": self.execution_device,
             "uncertainty_threshold": self.uncertainty_threshold,
             "message": self.message,
-            "final_prediction": self.final_prediction.to_dict(),
+            "final_prediction": final.to_dict(),
             "predictions": [p.to_dict() for p in self.predictions],
             "shadow_routing": self.shadow_routing,
+            "verdict_source": getattr(self, "verdict_source", "specialist_any_fake_v3"),
+            "active_verdict_engine": getattr(self, "active_verdict_engine", "v3"),
+            "verdict": final.label,
+            "verdict_reason": final.reason,
+            "available_scores": getattr(final, "available_scores", None),
+            "unavailable_models": getattr(final, "unavailable_models", None),
+            "triggering_models": getattr(final, "triggering_models", None),
+            "primary_trigger": getattr(final, "primary_trigger", None),
+            "thresholds": getattr(final, "thresholds", None),
         }
 
 
@@ -452,6 +722,7 @@ class DeepFakeInferenceEngine:
         load_router: bool = True,
         routing_policy: str = "safeguard",
         safeguard_confidence_threshold: float = DEFAULT_SAFEGUARD_CONFIDENCE_THRESHOLD,
+        verdict_config_path: Optional[Union[str, Path]] = None,
     ):
         self.primary_checkpoint = Path(primary_checkpoint or DEFAULT_PRIMARY_CHECKPOINT)
         self.device = device or detect_execution_device()
@@ -467,6 +738,15 @@ class DeepFakeInferenceEngine:
         self.load_router = load_router
         self.routing_policy = routing_policy
         self.safeguard_confidence_threshold = float(safeguard_confidence_threshold)
+
+        # Verdict engine configuration (v3 Specialist-Any-FAKE vs legacy)
+        self.verdict_config = load_verdict_config(verdict_config_path)
+        self.active_engine = os.environ.get("VERDICT_ENGINE") or self.verdict_config.get("active_engine", "v3")
+        self.allow_real = bool(self.verdict_config.get("allow_real", False))
+        self.v3_thresholds = {k: float(v) for k, v in self.verdict_config.get("thresholds", {}).items()}
+        self.preprocessing_config = self.verdict_config.get("preprocessing", {})
+        self.vit_uncropped = bool(self.preprocessing_config.get("vit_uncropped", True))
+        self.community_vit_uncropped = bool(self.preprocessing_config.get("community_vit_uncropped", True))
 
         self.primary_model: Optional[DeepfakeEfficientNetB0] = None
         self.secondary_model: Optional[ViTDetector] = None
@@ -790,7 +1070,7 @@ class DeepFakeInferenceEngine:
                     "consensus": "inconclusive",
                     "votes": {"REAL": 0, "FAKE": 0},
                     "total_models": len(selected_keys),
-                    "reason": "no_face_detected",
+                    "reason": "no_usable_face" if self.active_engine == "v3" else "no_face_detected",
                 },
                 "production_verdict": {
                     "label": "INCONCLUSIVE",
@@ -801,6 +1081,66 @@ class DeepFakeInferenceEngine:
                 "verdicts_match": True,
                 "shadow_mode": True,
             }
+            if self.active_engine == "v3":
+                v3_no_face = {
+                    "verdict": "INCONCLUSIVE",
+                    "reason": "no_usable_face",
+                    "available_scores": {},
+                    "unavailable_models": list(self.v3_thresholds.keys()),
+                    "triggering_models": [],
+                    "triggering_scores": {},
+                    "primary_trigger": None,
+                    "thresholds": dict(self.v3_thresholds),
+                    "verdict_engine": "v3",
+                    "verdict_source": "specialist_any_fake_v3",
+                    "allow_real": self.allow_real,
+                }
+                return ImageInferenceResult(
+                    status="inconclusive",
+                    faces_detected=0,
+                    model_name=display_model_name,
+                    checkpoint_path=checkpoint_str,
+                    execution_device=str(self.device),
+                    uncertainty_threshold=uncertainty_threshold,
+                    message="No human faces detected in the image.",
+                    active_verdict_engine="v3",
+                    verdict_source="specialist_any_fake_v3",
+                    predictions=[
+                        FacePrediction(
+                            face_id=0,
+                            label="INCONCLUSIVE",
+                            score=None,
+                            score_type=SCORE_TYPE_UNSETTLED,
+                            box=None,
+                            probabilities=None,
+                            raw_logits=None,
+                            reason="no_usable_face",
+                            face_crop_base64=None,
+                            gradcam_heatmap_base64=None,
+                            gradcam_overlay_base64=None,
+                            efficientnet=None,
+                            vit=None,
+                            community_vit=None,
+                            sbi=None,
+                            hybrid_srm=None,
+                            fusion={"label": "INCONCLUSIVE", "score": None, "reason": "no_usable_face"},
+                            combined_result=None,
+                            shadow_routing=shadow_routing_data,
+                            verdict_source="specialist_any_fake_v3",
+                            verdict_engine="v3",
+                            verdict_reason="no_usable_face",
+                            available_scores={},
+                            unavailable_models=list(self.v3_thresholds.keys()),
+                            triggering_models=[],
+                            triggering_scores={},
+                            primary_trigger=None,
+                            thresholds=dict(self.v3_thresholds),
+                            v3_verdict=v3_no_face,
+                        )
+                    ],
+                    shadow_routing=shadow_routing_data,
+                )
+
             return ImageInferenceResult(
                 status="inconclusive",
                 faces_detected=0,
@@ -809,6 +1149,8 @@ class DeepFakeInferenceEngine:
                 execution_device=str(self.device),
                 uncertainty_threshold=uncertainty_threshold,
                 message="No human faces detected in the image.",
+                active_verdict_engine="legacy",
+                verdict_source="two_model_agreement_legacy",
                 predictions=[
                     FacePrediction(
                         face_id=0,
@@ -839,6 +1181,8 @@ class DeepFakeInferenceEngine:
                             "unavailable_models": [],
                         },
                         shadow_routing=shadow_routing_data,
+                        verdict_source="two_model_agreement_legacy",
+                        verdict_engine="legacy",
                     )
                 ],
                 shadow_routing=shadow_routing_data,
@@ -873,7 +1217,7 @@ class DeepFakeInferenceEngine:
                         "consensus": "inconclusive",
                         "votes": {"REAL": 0, "FAKE": 0},
                         "total_models": len(selected_keys),
-                        "reason": art.quality_reason,
+                        "reason": "no_usable_face" if self.active_engine == "v3" else art.quality_reason,
                     },
                     "production_verdict": {
                         "label": "INCONCLUSIVE",
@@ -884,6 +1228,55 @@ class DeepFakeInferenceEngine:
                     "verdicts_match": True,
                     "shadow_mode": True,
                 }
+                if self.active_engine == "v3":
+                    v3_unusable = {
+                        "verdict": "INCONCLUSIVE",
+                        "reason": "no_usable_face",
+                        "available_scores": {},
+                        "unavailable_models": list(self.v3_thresholds.keys()),
+                        "triggering_models": [],
+                        "triggering_scores": {},
+                        "primary_trigger": None,
+                        "thresholds": dict(self.v3_thresholds),
+                        "verdict_engine": "v3",
+                        "verdict_source": "specialist_any_fake_v3",
+                        "allow_real": self.allow_real,
+                    }
+                    predictions.append(
+                        FacePrediction(
+                            face_id=art.face_id,
+                            label="INCONCLUSIVE",
+                            score=None,
+                            score_type=SCORE_TYPE_UNSETTLED,
+                            box=list(art.box),
+                            probabilities=None,
+                            raw_logits=None,
+                            reason="no_usable_face",
+                            face_crop_base64=face_crop_b64,
+                            gradcam_heatmap_base64=None,
+                            gradcam_overlay_base64=None,
+                            efficientnet=None,
+                            vit=None,
+                            community_vit=None,
+                            sbi=None,
+                            hybrid_srm=None,
+                            fusion={"label": "INCONCLUSIVE", "score": None, "reason": "no_usable_face"},
+                            combined_result=None,
+                            shadow_routing=face_shadow_routing,
+                            verdict_source="specialist_any_fake_v3",
+                            verdict_engine="v3",
+                            verdict_reason="no_usable_face",
+                            available_scores={},
+                            unavailable_models=list(self.v3_thresholds.keys()),
+                            triggering_models=[],
+                            triggering_scores={},
+                            primary_trigger=None,
+                            thresholds=dict(self.v3_thresholds),
+                            v3_verdict=v3_unusable,
+                        )
+                    )
+                    continue
+
                 predictions.append(
                     FacePrediction(
                         face_id=art.face_id,
@@ -914,6 +1307,8 @@ class DeepFakeInferenceEngine:
                             "unavailable_models": [],
                         },
                         shadow_routing=face_shadow_routing,
+                        verdict_source="two_model_agreement_legacy",
+                        verdict_engine="legacy",
                     )
                 )
                 continue
@@ -945,12 +1340,31 @@ class DeepFakeInferenceEngine:
             }
 
             vit_result: Optional[Dict[str, Any]] = None
+            vit_input = (
+                pil_img
+                if (self.active_engine == "v3" and self.vit_uncropped)
+                else art.crop_pil
+            )
+            vit_prep = (
+                "ViTImageProcessor on full uncropped image"
+                if (self.active_engine == "v3" and self.vit_uncropped)
+                else "ViTImageProcessor on the same SCRFD face crop"
+            )
             if self.secondary_model is not None:
-                vit_result = dict(self.secondary_model.predict(art.crop_pil))
-                vit_result.update({
-                    "loaded": True,
-                    "preprocessing": "ViTImageProcessor on the same SCRFD face crop",
-                })
+                try:
+                    vit_result = dict(self.secondary_model.predict(vit_input))
+                    vit_result.update({
+                        "loaded": True,
+                        "preprocessing": vit_prep,
+                    })
+                except Exception as vit_err:
+                    logger.warning(f"ViT inference failed for face ID {art.face_id}: {vit_err}")
+                    vit_result = {
+                        "label": "INCONCLUSIVE",
+                        "score": None,
+                        "reason": str(vit_err),
+                        "loaded": False,
+                    }
             else:
                 vit_result = {
                     "label": "INCONCLUSIVE",
@@ -971,9 +1385,23 @@ class DeepFakeInferenceEngine:
 
             # Community Forensics ViT (CVPR 2025)
             community_vit_result: Optional[Dict[str, Any]] = None
+            comm_vit_input = (
+                pil_img
+                if (self.active_engine == "v3" and self.community_vit_uncropped)
+                else art.crop_pil
+            )
+            comm_vit_prep = (
+                "CLIP processor on full uncropped image (shortest-edge 440 + center-crop 384)"
+                if (self.active_engine == "v3" and self.community_vit_uncropped)
+                else "CLIP processor on SCRFD face crop (shortest-edge 440 + center-crop 384)"
+            )
             if self.community_vit_model is not None:
                 try:
-                    community_vit_result = dict(self.community_vit_model.predict(art.crop_pil))
+                    community_vit_result = dict(self.community_vit_model.predict(comm_vit_input))
+                    community_vit_result.update({
+                        "loaded": True,
+                        "preprocessing": comm_vit_prep,
+                    })
                 except Exception as cv_err:
                     logger.warning(f"Community ViT inference failed for face ID {art.face_id}: {cv_err}")
                     community_vit_result = {
@@ -1044,6 +1472,24 @@ class DeepFakeInferenceEngine:
                 all_models_dict,
                 threshold=uncertainty_threshold,
             )
+
+            # Evaluate active verdict engine
+            if self.active_engine == "v3":
+                v3_res = evaluate_verdict_v3(
+                    model_predictions=all_models_dict,
+                    thresholds=self.v3_thresholds,
+                    allow_real=self.allow_real,
+                )
+                label = v3_res["verdict"]
+                reason = v3_res["reason"]
+                score = v3_res["triggering_scores"].get(v3_res["primary_trigger"]) if label == "FAKE" else None
+                verdict_source = "specialist_any_fake_v3"
+            else:
+                v3_res = None
+                label = fusion_result["label"]
+                score = fusion_result["score"]
+                reason = fusion_result["reason"]
+                verdict_source = "two_model_agreement_legacy"
 
             # Shadow Mode: Evaluate selected specialist consensus without altering production verdict
             routed_models_dict = {
@@ -1140,6 +1586,16 @@ class DeepFakeInferenceEngine:
                     fusion=fusion_result,
                     combined_result=combined_result,
                     shadow_routing=face_shadow_routing,
+                    verdict_source=verdict_source,
+                    verdict_engine=self.active_engine,
+                    verdict_reason=reason,
+                    available_scores=v3_res["available_scores"] if v3_res else None,
+                    unavailable_models=v3_res["unavailable_models"] if v3_res else None,
+                    triggering_models=v3_res["triggering_models"] if v3_res else None,
+                    triggering_scores=v3_res["triggering_scores"] if v3_res else None,
+                    primary_trigger=v3_res["primary_trigger"] if v3_res else None,
+                    thresholds=v3_res["thresholds"] if v3_res else None,
+                    v3_verdict=v3_res,
                 )
             )
 
@@ -1156,6 +1612,8 @@ class DeepFakeInferenceEngine:
             message=f"Analyzed {len(face_artifacts)} detected face(s) independently.",
             predictions=predictions,
             shadow_routing=predictions[0].shadow_routing if predictions else None,
+            active_verdict_engine=self.active_engine,
+            verdict_source="specialist_any_fake_v3" if self.active_engine == "v3" else "two_model_agreement_legacy",
         )
 
     def get_gradcam_payload(
