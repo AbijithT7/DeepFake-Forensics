@@ -332,7 +332,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             <div class="visual-frame">
                                 <img src="${pred.gradcam_overlay_base64 || pred.face_crop_base64}" alt="Grad-CAM Overlay">
                             </div>
-                            <span class="visual-item-caption">EfficientNet active regions blended</span>
+                            <span class="visual-item-caption">EfficientNet attention</span>
                         </div>
                     </div>
 
@@ -366,81 +366,132 @@ document.addEventListener("DOMContentLoaded", () => {
             gradcamFacesContainer.appendChild(block);
         });
 
-        // 2. Render model diagnostics and the final fusion decision.
+        // 2. Render model diagnostics and the final v3 verdict
         const primaryPred = finalPred;
-        const overallLabel = primaryPred.label || "INCONCLUSIVE";
-        const efficientnet = primaryPred.efficientnet;
-        const vit = primaryPred.vit;
-        const communityVit = primaryPred.community_vit;
-        const sbi = primaryPred.sbi;
-        const hybridSrm = primaryPred.hybrid_srm;
-        const fusion = primaryPred.fusion || {
-            label: overallLabel,
-            score: primaryPred.score,
-            reason: primaryPred.reason
-        };
-        const combined = primaryPred.combined_result || {
-            label: overallLabel,
-            consensus: "inconclusive",
-            votes: { REAL: 0, FAKE: 0 },
-            reason: primaryPred.reason
+        const activeEngine = data.active_verdict_engine || primaryPred.verdict_engine || "v3";
+        const rawVerdict = data.verdict || primaryPred.verdict || primaryPred.label || "INCONCLUSIVE";
+        
+        // In v3, REAL is strictly prohibited:
+        let overallLabel = rawVerdict.toUpperCase();
+        if (activeEngine === "v3" && overallLabel === "REAL") {
+            overallLabel = "INCONCLUSIVE";
+        }
+
+        const verdictReason = data.verdict_reason || primaryPred.verdict_reason || primaryPred.reason || "no_high_confidence_fake_signal";
+        const availableScores = data.available_scores || primaryPred.available_scores || {};
+        const unavailableModels = data.unavailable_models || primaryPred.unavailable_models || [];
+        const triggeringModels = data.triggering_models || primaryPred.triggering_models || [];
+        const triggeringScores = data.triggering_scores || primaryPred.triggering_scores || {};
+        const primaryTrigger = data.primary_trigger || primaryPred.primary_trigger || null;
+        const thresholds = data.thresholds || primaryPred.thresholds || {
+            efficientnet: 0.9000,
+            vit: 0.9000,
+            community_vit: 1.0000,
+            sbi: 0.9997,
+            hybrid_srm: 0.9000
         };
 
         function formatScore(score) {
-            return score === null || score === undefined ? "Unavailable" : `${(Number(score) * 100).toFixed(1)}%`;
+            return score === null || score === undefined ? "Unavailable" : `${(Number(score) * 100).toFixed(2)}%`;
         }
 
-        function readableReason(reason) {
-            const reasons = {
-                face_not_usable: "Face quality rejection: the detected face failed a visibility or image-quality check.",
-                face_too_blurry: "Face quality rejection: the detected face is too blurry.",
-                face_too_small: "Face quality rejection: the detected face is too small.",
-                low_face_detection_confidence: "Face quality rejection: SCRFD detection confidence was too low.",
-                no_face_detected: "Face quality rejection: no usable face was detected.",
-                model_disagreement: "Model disagreement: EfficientNet and ViT produced conflicting predictions.",
-                low_confidence: "Low-confidence prediction: at least one model was below the configured threshold.",
-                model_unavailable_or_no_face: "Fusion unavailable: one or more model results are missing.",
-            };
-            return reasons[reason] ||
-                (reason ? reason.replace(/_/g, " ") :
-                    "Successful REAL/FAKE agreement: both models met the threshold and agreed.");
+        function formatProb(prob) {
+            return prob === null || prob === undefined ? "—" : Number(prob).toFixed(4);
         }
 
-        const modelCard = (name, result, detail) => {
-            if (!result || result.loaded === false) {
-                return `<article class="model-diagnostic unavailable">
-                    <div class="model-diagnostic-header"><strong>${name}</strong><span>UNAVAILABLE</span></div>
-                    <p>${detail}</p>
-                </article>`;
+        // 3. Populate Primary Verdict Banner
+        outcomeBadge.textContent = overallLabel;
+        outcomeBadge.className = `outcome-badge ${overallLabel}`;
+        resultStepCard.className = `card step-card result-card verdict-${overallLabel.toLowerCase()}`;
+
+        const triggerSummaryBanner = document.getElementById("triggerSummaryBanner");
+        const verdictEngineLabel = document.getElementById("verdictEngineLabel");
+        if (verdictEngineLabel) {
+            verdictEngineLabel.textContent = activeEngine === "legacy" ? "Legacy Fusion" : "Specialist Engine v3";
+        }
+
+        if (overallLabel === "FAKE") {
+            scoreValue.textContent = primaryPred.score != null ? formatScore(primaryPred.score) : "FAKE";
+            fusionReason.textContent = primaryTrigger ? `Triggered by ${primaryTrigger}` : "Specialist threshold exceeded";
+            
+            if (triggerSummaryBanner) {
+                triggerSummaryBanner.classList.remove("hidden");
+                const triggerTagsHtml = triggeringModels.map(m => {
+                    const score = triggeringScores[m] != null ? formatScore(triggeringScores[m]) : (availableScores[m] != null ? formatScore(availableScores[m]) : "");
+                    const isPrimary = (m === primaryTrigger);
+                    return `<span class="trigger-tag ${isPrimary ? "primary" : ""}"><strong>${m}</strong> (${score})${isPrimary ? " &bull; Primary" : ""}</span>`;
+                }).join(" ");
+
+                triggerSummaryBanner.innerHTML = `
+                    <div class="trigger-summary-header">
+                        <span>🚨 Manipulated Image Detected</span>
+                        ${primaryTrigger ? `<span class="primary-trigger-pill">Primary: ${primaryTrigger}</span>` : ""}
+                    </div>
+                    <p style="font-size: 0.85rem; color: #7f1d1d; margin: 0 0 6px 0;">
+                        One or more calibrated specialists exceeded their high-confidence detection threshold:
+                    </p>
+                    <div class="triggering-models-list">${triggerTagsHtml}</div>
+                `;
             }
-            const label = result.label || "INCONCLUSIVE";
-            const probabilities = result.probabilities || {};
-            return `<article class="model-diagnostic">
-                <div class="model-diagnostic-header">
-                    <strong>${name}</strong>
-                    <span class="model-label ${label}">${label}</span>
-                </div>
-                <div class="model-score-grid">
-                    <span>REAL <strong>${formatScore(probabilities.REAL)}</strong></span>
-                    <span>FAKE <strong>${formatScore(probabilities.FAKE)}</strong></span>
-                    <span>Winning score <strong>${formatScore(result.score)}</strong></span>
-                </div>
-                <p class="model-preprocessing">${detail}</p>
-            </article>`;
-        };
 
-        const consensusTag = (combined.consensus || "inconclusive").replace(/_/g, " ").toUpperCase();
-        const chipsHtml = Object.entries(combined.qualifying_votes || {}).map(([mName, vLabel]) => {
-            const displayNames = {
-                efficientnet: "EffNet-B0",
-                vit: "HF-ViT",
-                community_vit: "Community-ViT",
-                sbi: "SBI-B4",
-                hybrid_srm: "Hybrid-SRM"
-            };
-            return `<span class="vote-chip ${vLabel}">${displayNames[mName] || mName}: ${vLabel}</span>`;
-        }).join(" ");
+            explanationIcon.textContent = "🚨";
+            explanationTitle.textContent = "Synthetic / AI-Generated Manipulation Detected";
+            explanationText.textContent = `At least one specialist detector triggered a high-confidence FAKE signal (${triggeringModels.join(", ")}). The Grad-CAM heatmap shows EfficientNet convolutional attention, not forensic proof of manipulation.`;
+        } else {
+            // INCONCLUSIVE
+            scoreValue.textContent = "INCONCLUSIVE";
+            fusionReason.textContent = verdictReason ? verdictReason.replace(/_/g, " ") : "no high confidence fake signal";
 
+            if (triggerSummaryBanner) {
+                triggerSummaryBanner.classList.add("hidden");
+                triggerSummaryBanner.innerHTML = "";
+            }
+
+            explanationIcon.textContent = "ℹ️";
+            explanationTitle.textContent = "Inconclusive Analysis";
+            explanationText.textContent = "No manipulation detected by these models. This does not confirm the image is authentic.";
+        }
+
+        // 4. Populate Collapsed Details Section: 5 Specialist Table
+        const specialistSpecs = [
+            { key: "efficientnet", name: "EfficientNet-B0", input: "SCRFD face crop (15% margin)", arch: "CNN (224x224)" },
+            { key: "vit", name: "Original ViT", input: "Uncropped full image", arch: "Vision Transformer (224x224)" },
+            { key: "community_vit", name: "Community Forensics ViT", input: "Uncropped full image", arch: "Vision Transformer (384x384)" },
+            { key: "sbi", name: "SBI EfficientNet-B4", input: "SCRFD face crop (15% margin)", arch: "CNN (380x380)" },
+            { key: "hybrid_srm", name: "Hybrid SRM", input: "SCRFD face crop (15% margin)", arch: "Dual-stream CNN (224x224)" },
+        ];
+
+        let tableRowsHtml = specialistSpecs.map(spec => {
+            const isUnavailable = unavailableModels.includes(spec.key) || !(spec.key in availableScores);
+            const score = availableScores[spec.key];
+            const thresh = thresholds[spec.key] != null ? thresholds[spec.key] : 0.90;
+            const didFire = triggeringModels.includes(spec.key);
+            const isPrimary = (spec.key === primaryTrigger);
+
+            let statusBadge = "";
+            if (isUnavailable) {
+                statusBadge = `<span class="trigger-status-badge unavailable">Unavailable</span>`;
+            } else if (isPrimary) {
+                statusBadge = `<span class="trigger-status-badge primary">Primary Trigger</span>`;
+            } else if (didFire) {
+                statusBadge = `<span class="trigger-status-badge fired">Triggered</span>`;
+            } else {
+                statusBadge = `<span class="trigger-status-badge not-fired">Below Threshold</span>`;
+            }
+
+            return `
+                <tr>
+                    <td><strong>${spec.name}</strong><br><small style="color: var(--text-muted);">${spec.arch}</small></td>
+                    <td>${spec.input}</td>
+                    <td>${isUnavailable ? "Unavailable" : "Ready"}</td>
+                    <td><strong>${isUnavailable ? "—" : formatProb(score)}</strong></td>
+                    <td>${thresh != null ? Number(thresh).toFixed(4) : "—"}</td>
+                    <td>${statusBadge}</td>
+                </tr>
+            `;
+        }).join("");
+
+        // Shadow Routing passive diagnostic (if present)
         const shadowRouting = primaryPred.shadow_routing || data.shadow_routing;
         let shadowRoutingHtml = "";
         if (shadowRouting) {
@@ -456,20 +507,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 `<span class="specialist-chip active"><span class="chip-dot"></span>${s}</span>`
             ).join(" ") || "<span>None selected</span>";
 
-            const shadowVerdict = shadowRouting.shadow_verdict || {};
-            const shadowLabel = shadowVerdict.label || "INCONCLUSIVE";
-            const shadowConsensus = (shadowVerdict.consensus || "inconclusive").replace(/_/g, " ").toUpperCase();
-            const productionLabel = overallLabel;
-            const verdictsMatch = shadowRouting.verdicts_match;
-            const alignmentHtml = verdictsMatch ?
-                `✅ <strong>Verdict Match:</strong> Shadow routed verdict (${shadowLabel}) aligns with production verdict (${productionLabel}).` :
-                `⚠️ <strong>Verdict Discrepancy:</strong> Shadow routed verdict is ${shadowLabel}, while authoritative production verdict is ${productionLabel}.`;
-
             shadowRoutingHtml = `
-                <div class="router-shadow-diagnostic">
+                <div class="router-shadow-diagnostic" style="margin-top: 16px;">
                     <div class="model-diagnostic-header">
                         <div class="router-header-title">
-                            <strong>Image-Type Router</strong>
+                            <strong>DINOv2 Typology Router</strong>
                             <span class="shadow-mode-pill">SHADOW MODE</span>
                         </div>
                         <span class="router-type-badge ${routedType}">${routedType}</span>
@@ -485,108 +527,41 @@ document.addEventListener("DOMContentLoaded", () => {
                             <strong class="router-meta-val">${routerConf}</strong>
                         </div>
                         <div class="router-meta-item">
-                            <span class="router-meta-label">Rejection Status</span>
+                            <span class="router-meta-label">Routing Status</span>
                             <strong class="router-meta-val">${rejectionStatus}</strong>
                         </div>
                     </div>
 
                     <div class="router-specialists-section">
-                        <span class="router-section-label">Selected Specialist Detectors (${selectedSpecialists.length}):</span>
-                        <div class="specialist-chips">
-                            ${specialistChips}
-                        </div>
-                    </div>
-
-                    <div class="shadow-comparison-section">
-                        <div class="comparison-row">
-                            <span>Hypothetical Routed Verdict:</span>
-                            <span class="shadow-verdict-badge ${shadowLabel}">${shadowLabel} (${shadowConsensus})</span>
-                        </div>
-                        <div class="comparison-row">
-                            <span>Production Authoritative Verdict:</span>
-                            <span class="production-verdict-badge ${productionLabel}">${productionLabel}</span>
-                        </div>
-                        <div class="comparison-alignment">
-                            ${alignmentHtml}
-                        </div>
+                        <span class="router-section-label">Selected Specialists (${selectedSpecialists.length}):</span>
+                        <div class="specialist-chips">${specialistChips}</div>
                     </div>
 
                     <div class="shadow-isolation-notice">
-                        🛡️ <strong>Shadow Mode Active:</strong> Input typology is classified with frozen DINOv2 embeddings to evaluate specialist routing policies in passive mode. Existing 5-model inference and production verdict remain 100% authoritative and unchanged.
+                        🛡️ <strong>Shadow Mode Active:</strong> Typology classification runs passively with frozen DINOv2 embeddings. It exerts zero influence over production verdicts.
                     </div>
                 </div>
             `;
         }
 
         modelDiagnostics.innerHTML = `
-            ${modelCard("EfficientNet-B0 (Primary)", efficientnet, "SCRFD crop &middot; 224&times;224 &middot; ImageNet norm &middot; FaceForensics++")}
-            ${modelCard("ViT-v2 (Secondary)", vit, "SCRFD crop &middot; ViTImageProcessor &middot; General artifacts")}
-            ${modelCard("Community Forensics ViT", communityVit, "SCRFD crop &middot; 384&times;384 CLIP norm &middot; 4,800+ generators (CVPR 2025)")}
-            ${modelCard("SBI EfficientNet-B4", sbi, "SCRFD crop &middot; 380&times;380 [0, 1] scaling &middot; Self-Blended Images (CVPR 2022)")}
-            ${modelCard("Hybrid SRM (EffNet-B4 + Xception)", hybridSrm, "SCRFD crop &middot; 224&times;224 ImageNet norm &middot; Dual-stream spatial/frequency (140k Faces)")}
-            
+            <table class="specialist-table">
+                <thead>
+                    <tr>
+                        <th>Specialist Model</th>
+                        <th>Input Setting</th>
+                        <th>Availability</th>
+                        <th>P(fake)</th>
+                        <th>Threshold (T<sub>i</sub>)</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRowsHtml}
+                </tbody>
+            </table>
             ${shadowRoutingHtml}
-
-            <div class="combined-diagnostic ${combined.consensus || "inconclusive"}">
-                <div class="model-diagnostic-header">
-                    <strong>Multi-Model Combined Assessment</strong>
-                    <span class="model-label ${combined.label || "INCONCLUSIVE"}">${combined.label || "INCONCLUSIVE"} (${consensusTag})</span>
-                </div>
-                <div class="vote-chips">
-                    ${chipsHtml || '<span>No qualifying votes</span>'}
-                </div>
-                <p><strong>Consensus:</strong> ${combined.reason || "Evaluating multiple models..."}</p>
-                <div class="calibration-notice">
-                    ⚠️ <strong>Uncalibrated score warning:</strong> Raw probability scores are not directly comparable across disparate architectures. Model scores reflect specialized training domains (e.g. boundary synthesis artifacts vs. generative model frequency fingerprints). The combined result represents multi-model consensus voting rather than score averaging.
-                </div>
-            </div>
-
-            <div class="fusion-diagnostic ${fusion.reason || "agreement"}">
-                <div class="model-diagnostic-header">
-                    <strong>Conservative Fusion Decision (EfficientNet + ViT)</strong>
-                    <span class="model-label ${fusion.label || "INCONCLUSIVE"}">${fusion.label || "INCONCLUSIVE"}</span>
-                </div>
-                <p>${readableReason(fusion.reason)}</p>
-                <small>Policy: both base models must meet the configured threshold and agree. Preserved for backward compatibility.</small>
-            </div>
         `;
-
-        scoreValue.textContent = fusion.label || "INCONCLUSIVE";
-        fusionReason.textContent = readableReason(fusion.reason);
-
-        outcomeBadge.textContent = overallLabel === "FAKE" ? "FAKE (MANIPULATED)" :
-                                   overallLabel === "REAL" ? "REAL (AUTHENTIC)" :
-                                   "INCONCLUSIVE";
-        outcomeBadge.className = `outcome-badge ${overallLabel}`;
-
-        resultStepCard.className = `card step-card result-card verdict-${overallLabel.toLowerCase()}`;
-
-        if (primaryPred.score !== null && primaryPred.score !== undefined) {
-            const scorePct = (primaryPred.score * 100).toFixed(1);
-            scoreValue.textContent = fusion.label || overallLabel;
-        } else {
-            scoreValue.textContent = fusion.label || overallLabel;
-        }
-
-        if (overallLabel === "FAKE") {
-            explanationIcon.textContent = "🚨";
-            explanationTitle.textContent = "Synthetic / AI-Generated Face Detected";
-            explanationText.textContent = "EfficientNet-B0 and ViT agreed this face is manipulated. The Grad-CAM view shows EfficientNet feature attribution, not proof of manipulation.";
-        } else if (overallLabel === "REAL") {
-            explanationIcon.textContent = "✅";
-            explanationTitle.textContent = "Authentic Portrait Verified";
-            explanationText.textContent = "EfficientNet-B0 and ViT agreed this face is authentic. The Grad-CAM view shows EfficientNet feature attribution, not proof of authenticity.";
-        } else {
-            explanationIcon.textContent = "⚠️";
-            const isFaceQualityRejection = ["no_face_detected", "face_not_usable",
-                                            "face_too_blurry", "face_too_small",
-                                            "low_face_detection_confidence"].includes(fusion.reason);
-            explanationTitle.textContent = fusion.reason === "model_disagreement" ? "Conflicting Model Predictions" :
-                                          fusion.reason === "low_confidence" ? "Low-Confidence Prediction" :
-                                          isFaceQualityRejection ? "Face Quality Rejection" :
-                                          "Inconclusive Analysis";
-            explanationText.textContent = `${readableReason(fusion.reason)} Please review the individual model scores above.`;
-        }
 
         analysisResultsWrapper.classList.remove("hidden");
         document.getElementById("gradcamStepCard").scrollIntoView({ behavior: "smooth", block: "start" });

@@ -6,7 +6,7 @@
 [![Git LFS](https://img.shields.io/badge/Git-LFS-orange.svg)](https://git-lfs.github.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A unified, face-first deepfake forensic inspection platform combining **SCRFD deep face localization**, a **DINOv2 image-type router**, **five specialized deepfake detectors**, an intelligent **Safeguard Routing Policy** with non-intrusive **Shadow Mode**, and **Grad-CAM visual explainability**.
+A unified deepfake forensic inspection platform combining **SCRFD deep face localization**, a **DINOv2 image-type router in shadow mode**, **five specialized deepfake detectors**, the **Verdict Engine v3 (Specialist-Any-FAKE)** decision rule, and **EfficientNet Grad-CAM visual explainability**.
 
 ---
 
@@ -41,41 +41,59 @@ Modern face manipulation tools span vastly different paradigms—from GAN-genera
 
 ## 2. Forensic Architecture & Workflow
 
+DeepFake Forensics supports modular verdict engines configured via `src/image_detection/verdict_config.json` (or the `VERDICT_ENGINE` environment variable):
+
+### Earlier Verdict Engine v3 (`specialist_any_fake_v3`)
+- **Specialist-Any-FAKE Decision Rule**: Evaluates all five specialist detectors against strict per-model thresholds calibrated for $\le 1\%$ False Positive Rate on authentic training images:
+  - EfficientNet-B0: $T = 0.9000$ (15% SCRFD face crop)
+  - Original ViT: $T = 0.9000$ (Full uncropped image)
+  - Community Forensics ViT: $T = 1.0000$ (Full uncropped image)
+  - SBI EfficientNet-B4: $T = 0.9997$ (15% SCRFD face crop)
+  - Hybrid SRM: $T = 0.9000$ (15% SCRFD face crop)
+- **High-Specificity Union**: If any available specialist fires ($P(\text{fake}_i) \ge T_i$), the final image verdict is `FAKE`, with triggering specialists and primary trigger reported.
+- **Conservative Authenticity Guarantee**: If no specialist fires, the verdict is `INCONCLUSIVE` (`no_high_confidence_fake_signal`). Under v3, `REAL` verdicts are strictly prohibited (`allow_real: false`).
+- **Input Preprocessing Optimization**: Community Forensics ViT and Original ViT evaluate the full uncropped image (eliminating face crop dropouts on inpainting and lifting validation diffusion TPR), while EfficientNet, SBI, and Hybrid SRM evaluate validated SCRFD face crops with 15% margins.
+
+### Legacy Two-Model Fusion (`VERDICT_ENGINE=legacy`)
+- Retained for backward compatibility: requires strict agreement between EfficientNet-B0 and Original ViT at threshold $\tau = 0.60$.
+- Emits `REAL`, `FAKE`, or `INCONCLUSIVE`.
+
+### Shadow-Mode DINOv2 Router
+- Frozen DINOv2 (`facebook/dinov2-base`) 768-d CLS token embeddings classify manipulation typology into 7 classes.
+- Evaluates safeguard routing policies in passive telemetry mode without any influence on production verdicts.
+
 ```text
 Uploaded Image / Frame
          │
          ▼
 SCRFD Deep Face Localization (500M ONNX)
          │
-         ▼
-Facial Quality Validation Gate
- (Laplacian blur check, size >= 40px, truncation check)
+         ├── [No Usable Face / Quality Failed] ──► Verdict: INCONCLUSIVE (no_usable_face)
          │
-         ├── [Quality Failed / No Face] ──► Verdict: INCONCLUSIVE
-         │
-         ▼ [Passed Quality Gate]
-Face Region Extraction (15% context margin)
+         ▼ [Quality Verified Face Crop]
+Input Conditioning:
+ ├─ Full Uncropped Image ─────────────► Original ViT & Community Forensics ViT
+ └─ 15% Margin Face Crop ─────────────► EfficientNet-B0, SBI & Hybrid SRM
          │
          ├────────────────────────────────────────┐
-         │ (Shadow Mode Evaluation)               │ (Production Consensus Pipeline)
+         │ (Shadow Mode Evaluation)               │ (Production Engine v3)
          ▼                                        ▼
-DINOv2 Typology Router                   Exhaustive Specialist Ensemble:
- (Extract 768-d cls token)               ├─ 1. EfficientNet-B0 (RVF10K)
-         │                               ├─ 2. Original ViT (Token Attention)
-         ▼                               ├─ 3. Community Forensics ViT (Diffusion)
-Predicted Category & Confidence          ├─ 4. SBI EfficientNet-B4 (Blended Edges)
-         │                               └─ 5. Hybrid SRM (Spatial + Steganalysis)
+DINOv2 Typology Router                   Evaluate Calibrated Thresholds:
+ (Extract 768-d cls token)               ├─ P(fake_effnet) >= 0.9000?
+         │                               ├─ P(fake_vit) >= 0.9000?
+         ▼                               ├─ P(fake_comm_vit) >= 1.0000?
+Predicted Category & Confidence          ├─ P(fake_sbi) >= 0.9997?
+         │                               └─ P(fake_srm) >= 0.9000?
          ▼                                        │
-Safeguard Routing Policy                          ▼
- (tau = 0.85 confidence gating)          Uncalibrated Consensus Decision Engine
-         │                                (Disagreement tracking & majority voting)
+Safeguard Policy Telemetry                        ▼
+ (Passive shadow metrics)                Any Specialist Fired?
+         │                               ├─ YES ──► Verdict: FAKE (Triggering specialists identified)
+         │                               └─ NO  ──► Verdict: INCONCLUSIVE (no_high_confidence_fake_signal)
          ▼                                        │
-Hypothetical Routed Verdict                       ▼
-         │                               Final Production Forensic Verdict
          └───────────────────┬────────────────────┘
                              ▼
                FastAPI JSON / Web Dashboard
-               (Attribution Heatmaps via Grad-CAM)
+               (EfficientNet Grad-CAM Attention Heatmaps)
 ```
 
 ---
@@ -297,52 +315,64 @@ The application automatically serves:
 ## 10. REST API Documentation
 
 ### 1. `POST /predict/image`
-Analyzes an uploaded image, localizes faces, validates quality, runs the specialist ensemble, and records shadow routing telemetry.
+Analyzes an uploaded image, localizes faces with SCRFD, validates facial quality, evaluates the 5-specialist ensemble under Verdict Engine v3, and outputs structured predictions and shadow routing telemetry.
 
 **Parameters (multipart/form-data)**:
-- `file`: Image file (`image/jpeg`, `image/png`, `image/webp`).
+- `file`: Image file (`image/jpeg`, `image/png`, `image/webp`, `image/bmp`).
 - `include_gradcam` (optional, bool, default: `true`): Include base64-encoded Grad-CAM overlay.
 
-**Example Response**:
+**Example Response (Verdict Engine v3)**:
 ```json
 {
-  "filename": "portrait.jpg",
-  "prediction": "FAKE",
-  "confidence": 0.9984,
-  "verdict_source": "two_model_fusion (EfficientNet-B0 + ViT)",
+  "status": "success",
   "faces_detected": 1,
-  "face_usable": true,
-  "face_bbox": [124, 82, 310, 315],
-  "facial_quality": {
-    "is_usable": true,
-    "quality_reason": null,
-    "laplacian_variance": 420.5,
-    "face_size": 233
+  "model_name": "EfficientNet-B0",
+  "execution_device": "cpu",
+  "uncertainty_threshold": 0.60,
+  "verdict_source": "specialist_any_fake_v3",
+  "active_verdict_engine": "v3",
+  "verdict": "FAKE",
+  "verdict_reason": "specialist_threshold_exceeded",
+  "primary_trigger": "community_vit",
+  "triggering_models": ["community_vit", "hybrid_srm"],
+  "available_scores": {
+    "efficientnet": 0.6120,
+    "vit": 0.5432,
+    "community_vit": 1.0000,
+    "sbi": 0.0123,
+    "hybrid_srm": 0.9412
   },
-  "consensus_details": {
-    "consensus": "majority_fake",
-    "votes": { "REAL": 0, "FAKE": 4 },
-    "total_models": 5
+  "unavailable_models": [],
+  "thresholds": {
+    "efficientnet": 0.9000,
+    "vit": 0.9000,
+    "community_vit": 1.0000,
+    "sbi": 0.9997,
+    "hybrid_srm": 0.9000
   },
-  "model_predictions": {
-    "primary_efficientnet": { "label": "FAKE", "score": 0.9984 },
-    "secondary_vit": { "label": "FAKE", "score": 0.9851 },
-    "community_forensics_vit": { "label": "FAKE", "score": 0.9992 },
-    "sbi": { "label": "FAKE", "score": 0.8842 },
-    "hybrid_srm": { "label": "FAKE", "score": 0.9412 }
+  "final_prediction": {
+    "face_id": 0,
+    "label": "FAKE",
+    "score": 1.0000,
+    "reason": "specialist_threshold_exceeded",
+    "primary_trigger": "community_vit",
+    "triggering_models": ["community_vit", "hybrid_srm"],
+    "triggering_scores": {
+      "community_vit": 1.0000,
+      "hybrid_srm": 0.9412
+    },
+    "verdict_source": "specialist_any_fake_v3",
+    "verdict_engine": "v3"
   },
   "shadow_routing": {
-    "predicted_image_type": "DIFFUSION",
-    "confidence": 0.9521,
+    "image_type": "DIFFUSION",
+    "router_confidence": 0.9521,
     "routing_policy": "safeguard",
     "safeguard_threshold": 0.85,
     "policy_reason": "high_confidence_diffusion (conf=0.9521 >= 0.85)",
-    "selected_specialists": ["community_forensics_vit"],
-    "shadow_verdict": "FAKE",
-    "shadow_consensus": "unanimous_fake",
-    "matches_production": true
-  },
-  "gradcam_base64": "data:image/jpeg;base64,..."
+    "selected_specialists": ["Community Forensics ViT"],
+    "shadow_mode": true
+  }
 }
 ```
 
@@ -351,35 +381,34 @@ Returns API service status, compute device, active specialist models, and active
 ```json
 {
   "status": "healthy",
+  "primary_model_loaded": true,
+  "secondary_model_loaded": true,
+  "community_vit_loaded": true,
+  "sbi_loaded": true,
+  "hybrid_srm_loaded": true,
+  "router_loaded": true,
+  "router_mode": "shadow",
+  "routing_policy": "safeguard",
+  "safeguard_confidence_threshold": 0.85,
+  "primary_model": "EfficientNet-B0",
+  "face_detector": "SCRFD (ONNX)",
   "device": "cpu",
-  "cuda_available": false,
-  "models": {
-    "face_detector": "SCRFD (500M)",
-    "primary": "EfficientNet-B0",
-    "secondary": "ViT (HF)",
-    "community_forensics_vit": "Community Forensics ViT",
-    "sbi": "SBI EfficientNet-B4",
-    "hybrid_srm": "Hybrid SRM"
-  },
-  "image_type_router": {
-    "status": "loaded",
-    "mode": "shadow",
-    "routing_policy": "safeguard",
-    "safeguard_confidence_threshold": 0.85
-  }
+  "cuda_available": false
 }
 ```
 
 ### 3. `GET /models/info`
-Returns architectural metadata, checkpoint sources, and detection specializations for all models.
+Returns architectural metadata, checkpoint sources, input preprocessing, and detection specializations for all models.
 
 ---
 
 ## 11. Limitations & Responsible Use
 
-1. **Facial Boundary Focus**: Detectors evaluate isolated face crops. Whole-body deepfakes or full-scene background manipulations without a visible face are flagged as `INCONCLUSIVE`.
-2. **Adversarial Perturbations**: High-frequency noise residuals (Hybrid SRM) can be influenced by heavy JPEG re-compression or adversarial noise.
-3. **Decision Support Only**: This platform is designed as an assistive tool for investigative and forensic workflows. Forensic verdicts should always be considered alongside provenance metadata and contextual evidence.
+> **Core Limitation Note:** Detection performance remains limited on newer and previously unseen generative models. An INCONCLUSIVE result does not establish authenticity.
+
+1. **Facial Boundary Focus**: Detectors evaluate isolated face crops or facial context. Whole-body deepfakes or full-scene background manipulations without a visible face are flagged as `INCONCLUSIVE` (`no_usable_face`).
+2. **Adversarial & Re-compression Robustness**: High-frequency noise residuals (Hybrid SRM) and delicate blending boundaries (SBI) can be attenuated by multiple rounds of lossy social media JPEG/WebP compression.
+3. **Decision Support Only**: This platform is designed as an assistive tool for investigative and forensic workflows. Forensic verdicts should always be considered alongside provenance metadata, forensic event logs, and human expert verification. Under Verdict Engine v3, portraits that exhibit no manipulation signals are categorized as `INCONCLUSIVE` rather than authenticated as definitively genuine.
 
 ---
 

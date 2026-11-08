@@ -129,7 +129,7 @@
                         <div class="step-number">3</div>
                         <div class="step-info">
                             <h2>Classification Verdict</h2>
-                            <p>Predictions from EfficientNet-B0, ViT, Community Forensics ViT, SBI EfficientNet-B4, and Hybrid SRM CNN applied to the same SCRFD face crop.</p>
+                            <p>Evaluated with independent specialist detectors: uncropped full-image for ViTs, 15% face crops for CNNs.</p>
                         </div>
                     </div>
 
@@ -139,13 +139,29 @@
                             <span class="outcome-badge" id="outcomeBadge">ANALYZING</span>
                         </div>
                         <div class="verdict-score-wrap">
-                            <span class="verdict-label">Fusion decision</span>
+                            <span class="verdict-label" id="verdictEngineLabel">Verdict Engine v3</span>
                             <span class="verdict-score" id="scoreValue">--</span>
                             <span class="score-type-note" id="fusionReason">Waiting for model results</span>
                         </div>
                     </div>
 
-                    <div class="model-diagnostics" id="modelDiagnostics"></div>
+                    <!-- Trigger Summary Banner for FAKE verdicts -->
+                    <div id="triggerSummaryBanner" class="trigger-summary-banner hidden"></div>
+
+                    <!-- Collapsed Details Section: Specialists & Diagnostics -->
+                    <details class="diagnostics-details" id="diagnosticsDetails">
+                        <summary class="diagnostics-summary">
+                            <span class="summary-title">Specialist Model Details &amp; Diagnostics</span>
+                            <span class="summary-badge">5 Specialists</span>
+                        </summary>
+                        <div class="model-diagnostics" id="modelDiagnostics"></div>
+                    </details>
+
+                    <!-- Limitations Notice -->
+                    <div class="limitations-notice">
+                        <span class="notice-icon">ℹ️</span>
+                        <p><strong>Notice:</strong> Detection performance remains limited on newer and previously unseen generative models. An INCONCLUSIVE result does not establish authenticity.</p>
+                    </div>
 
                     <!-- Forensic Explanation -->
                     <div class="forensic-explanation" id="forensicExplanation">

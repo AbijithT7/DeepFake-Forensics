@@ -42,9 +42,24 @@ class FacePredictionSchema(BaseModel):
     community_vit: Optional[Dict] = Field(None, description="Community Forensics ViT individual prediction and class scores")
     sbi: Optional[Dict] = Field(None, description="SBI EfficientNet-B4 individual prediction and class scores")
     hybrid_srm: Optional[Dict] = Field(None, description="Hybrid SRM (EfficientNet-B4 + Xception) individual prediction and class scores")
+    deepguard: Optional[Dict] = Field(None, description="DeepGuard face manipulation detector scores")
+    authenticity: Optional[Dict] = Field(None, description="Trained DINOv2 whole-image binary classifier")
+    prediction_scope: str = Field("face", description="Image or face assessment")
+    quality_reason: Optional[str] = Field(None, description="Face quality rejection, independent of the image verdict")
+    verdict_details: Optional[Dict] = Field(None, description="Decision rule, applied thresholds and diagnostic signals")
     fusion: Optional[Dict] = Field(None, description="Fusion decision and reason")
     combined_result: Optional[Dict] = Field(None, description="Multi-model consensus assessment across all detectors")
     shadow_routing: Optional[ShadowRoutingSchema] = Field(None, description="Shadow-mode specialist routing diagnostics")
+    verdict_source: Optional[str] = Field(None, description="Verdict engine source identifier")
+    verdict_engine: Optional[str] = Field(None, description="Active verdict engine ID")
+    verdict_reason: Optional[str] = Field(None, description="Detailed explanation for the verdict")
+    available_scores: Optional[Dict[str, float]] = Field(None, description="Probabilities of fake for available specialists")
+    unavailable_models: Optional[List[str]] = Field(None, description="Specialists that could not be evaluated")
+    triggering_models: Optional[List[str]] = Field(None, description="Specialists whose score met or exceeded threshold")
+    triggering_scores: Optional[Dict[str, float]] = Field(None, description="Scores of the triggering specialists")
+    primary_trigger: Optional[str] = Field(None, description="Specialist with the highest score among triggers")
+    thresholds: Optional[Dict[str, float]] = Field(None, description="Per-model thresholds applied")
+    v3_verdict: Optional[Dict] = Field(None, description="Full v3 verdict engine evaluation object")
 
     model_config = {
         "json_schema_extra": {
@@ -72,9 +87,18 @@ class PredictionResponseSchema(BaseModel):
     execution_device: str = Field(..., description="Active compute device (e.g., cpu, cuda)")
     uncertainty_threshold: float = Field(..., description="Threshold applied to determine conclusive labels")
     message: Optional[str] = Field(None, description="Informational message regarding the inference outcome")
-    final_prediction: FacePredictionSchema = Field(..., description="Single fused image-level verdict from both classifiers")
+    final_prediction: FacePredictionSchema = Field(..., description="Image verdict from available image and face specialists")
     predictions: List[FacePredictionSchema] = Field(..., description="Individual per-face prediction objects")
     shadow_routing: Optional[ShadowRoutingSchema] = Field(None, description="Shadow-mode specialist routing diagnostics")
+    verdict_source: Optional[str] = Field("specialist_any_fake_v3", description="Active verdict engine source identifier")
+    active_verdict_engine: Optional[str] = Field("v3", description="Active verdict engine identifier")
+    verdict: Optional[str] = Field(None, description="Final image verdict: REAL, FAKE or INCONCLUSIVE")
+    verdict_reason: Optional[str] = Field(None, description="Detailed reason for final verdict")
+    available_scores: Optional[Dict[str, float]] = Field(None, description="All available specialist detector scores")
+    unavailable_models: Optional[List[str]] = Field(None, description="Unavailable specialist detector names")
+    triggering_models: Optional[List[str]] = Field(None, description="Names of specialists that triggered FAKE")
+    primary_trigger: Optional[str] = Field(None, description="Primary triggering specialist detector")
+    thresholds: Optional[Dict[str, float]] = Field(None, description="Operating thresholds used for evaluation")
 
     model_config = {
         "json_schema_extra": {
@@ -100,6 +124,10 @@ class PredictionResponseSchema(BaseModel):
 
 class HealthResponseSchema(BaseModel):
     """Health check response schema."""
+    deepguard_loaded: bool = Field(False, description="DeepGuard checkpoint availability")
+    authenticity_loaded: bool = Field(False, description="Trained authenticity classifier availability")
+    all_specialists_loaded: bool = Field(False, description="Whether every configured specialist loaded")
+    active_verdict_engine: str = Field("v3", description="Active verdict engine ID ('v3' or 'legacy')")
     status: str = Field(..., description="Overall backend health status ('healthy' or 'degraded')")
     primary_model_loaded: bool = Field(..., description="Whether the primary EfficientNet-B0 model is loaded")
     secondary_model_loaded: bool = Field(..., description="Whether the ViT secondary model is loaded")
@@ -130,6 +158,12 @@ class ModelDetailSchema(BaseModel):
 
 class ModelsInfoResponseSchema(BaseModel):
     """Response schema for /models/info endpoint."""
+    deepguard_model: Optional[ModelDetailSchema] = None
+    authenticity_model: Optional[ModelDetailSchema] = None
+    authenticity_thresholds: Optional[Dict[str, float]] = None
+    decision_rule: Optional[Dict] = None
+    active_verdict_engine: str = "v3"
+    specialist_thresholds: Dict[str, float] = Field(default_factory=dict)
     primary_model: ModelDetailSchema
     secondary_model: Optional[ModelDetailSchema] = Field(None, description="Secondary ViT model details")
     community_vit_model: Optional[ModelDetailSchema] = Field(None, description="Community Forensics ViT model details")
