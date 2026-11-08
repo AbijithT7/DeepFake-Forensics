@@ -84,10 +84,10 @@ Hypothetical Routed Verdict                       ▼
 
 | # | Detector Name | Architecture | Backbone / Source | Primary Forensic Specialization |
 | :-: | :--- | :--- | :--- | :--- |
-| **1** | **Primary EfficientNet-B0** | CNN (PyTorch) | Pretrained EfficientNet-B0 fine-tuned on RVF10K | Video compression artifacts, FaceForensics++, spatial artifacts. Supports Grad-CAM. |
-| **2** | **Original ViT** | Vision Transformer | `prithivMLmods/Deep-Fake-Detector-v2-Model` | Global patch-token attention anomalies, structural facial symmetry inconsistencies. |
-| **3** | **Community Forensics ViT** | Vision Transformer | `buildborderless/CommunityForensics-DeepfakeDet-ViT` | State-of-the-art diffusion artifacts (4,800+ generators), text-to-image synthesis, inpainting. |
-| **4** | **SBI EfficientNet-B4** | CNN (Self-Blended) | Pretrained on Self-Blended Images (`FFraw.tar`) | Face swap boundary discrepancies, false facial edge blending, facial cut-and-paste seams. |
+| **1** | **Primary EfficientNet-B0** | CNN (PyTorch) | Pretrained EfficientNet-B0 fine-tuned on RVF10K | High-sensitivity StyleGAN GAN synthesis artifacts (94% recall on StyleGAN benchmark); near-zero sensitivity to diffusion, swaps, and inpainting (0% recall on Primary 200 at threshold 0.60). Supports Grad-CAM. |
+| **2** | **Original ViT** | Vision Transformer | `prithivMLmods/Deep-Fake-Detector-v2-Model` | Upstream Vision Transformer for synthetic face classification. Note: When evaluated on tight facial crops, exhibits severe miscalibration (50% false positive rate on authentic faces; ROC-AUC 0.435 on primary benchmark). |
+| **3** | **Community Forensics ViT** | Vision Transformer | `buildborderless/CommunityForensics-DeepfakeDet-ViT` | Broad-spectrum generative artifact recognition across diffusion and inpainting. Shows highest Primary 200 discriminability (ROC-AUC 0.778), but detection recall is dampened by facial crop isolation (28% diffusion recall at threshold 0.60). |
+| **4** | **SBI EfficientNet-B4** | CNN (Self-Blended) | Pretrained on Self-Blended Images (`FFraw.tar`) | Face swap boundary discrepancies, false facial edge blending. Note: Official implementation normalizes input to [0, 1] (/255) without ImageNet mean/std (verified against official repo mapooon/SelfBlendedImages). Standalone recall on benchmark face swaps is 50% at threshold 0.60. |
 | **5** | **Hybrid SRM Detector** | Dual-Stream CNN | EfficientNet-B4 (RGB) + Steganalysis Residual Xception | Steganalysis noise residuals, high-frequency frequency-domain sensor noise inconsistencies. |
 
 ---
@@ -122,6 +122,13 @@ Shadow mode is enabled by default (`shadow_mode=True`). The DINOv2 router and sa
 
 Evaluated on the preserved **frozen 250-image out-of-distribution benchmark** (50 samples $\times$ 5 manipulation categories: Real, StyleGAN, Diffusion Text2Img, FaceSwap, and Inpainting):
 
+### Out-of-Distribution Forensic Evaluation ($N=250$)
+Evaluated on the frozen 250-image benchmark (50 samples each across Real, StyleGAN, Diffusion, FaceSwap, and Inpainting):
+
+- **High False REAL Bypass Rate**: The current multi-model consensus classifies 80.5% of deepfakes (161/200) as REAL under Safeguard routing (and 87.0% under All-5 consensus). Out-of-distribution fake sensitivity is critically low: Diffusion 6.0% (3/50), Inpainting 6.0% (3/50), Face Swap 4.0% (2/50), and StyleGAN 36.0% (18/50).
+- **Conservative Bias on Authentic Portraits**: Authentic portrait accuracy is 98.0% (49/50) under Safeguard routing (100% under All-5), reflecting a strong ensemble bias toward predicting REAL.
+- **Safeguard Routing Impact**: Applying confidence gating ($\tau = 0.85$) cuts mean compute passes from 5.00 to 3.44 (-31.3%) while marginally lifting fake recall from 8.5% to 13.0%, but does not resolve underlying cross-generator generalization failure.
+
 ### Three-Way Benchmark Comparison ($N=250$)
 
 | Metric | Pipeline 1 (All-5 Models) | Pipeline 2 (Legacy DINOv2 Routing) | Pipeline 3 (Safeguard Routing, $\tau=0.85$) | Delta (P3 vs P1) | Delta (P3 vs P2) |
@@ -129,7 +136,7 @@ Evaluated on the preserved **frozen 250-image out-of-distribution benchmark** (5
 | **Strict Accuracy** | 26.80% (67/250) | 34.40% (86/250) | **30.00% (75/250)** | **+3.20%** | -4.40% |
 | **Conclusive Accuracy** | 27.80% | 41.35% | **31.78%** | **+3.98%** | -9.57% |
 | **Coverage (Decisive Rate)** | 96.40% | 83.20% | **94.40%** | -2.00% | **+11.20%** |
-| **Fake Recall (Sensitivity)** | 8.50% (17/200) | 25.00% (50/200) | **13.00% (26/200)** | **+4.50% (+53% rel.)** | -12.00% |
+| **Fake Recall (Sensitivity)** | 8.50% (17/200) | 25.00% (50/200) | **13.00% (26/200)** | **+4.50%** | -12.00% |
 | **Fake Precision** | 100.00% | 98.04% | **100.00%** | 0.00% | +1.96% |
 | **Real Recall (Authentic Acc)** | 100.00% (50/50) | 72.00% (36/50) | **98.00% (49/50)** | -2.00% | **+26.00% (Restored)** |
 | **False REAL Predictions** | 174 (87.0%) | 121 (60.5%) | **161 (80.5%)** | **-13 (Bypasses reduced)** | +40 |
@@ -159,7 +166,7 @@ DeepFake-Forensics/
 ├── requirements.txt          # Python dependencies
 ├── README.md                 # Project documentation
 │
-├── frontend/                 # Zero-build single-page web application
+├── frontend/                 # React + Vite responsive web application
 │   ├── index.html            # Dashboard layout
 │   ├── app.js                # Frontend controller & API bindings
 │   └── styles.css            # Responsive dark/light theme styles
@@ -264,6 +271,17 @@ python scripts/download_pretrained.py --model dinov2         # DINOv2 Base backb
 
 ## 9. Running the Application
 
+### Build the frontend
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+Build before starting the server so the generated assets are available. For frontend development, phone previews, theme behavior, and report storage, see [frontend/README.md](frontend/README.md).
+
 ### Start the FastAPI Server
 ```bash
 uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
@@ -291,7 +309,7 @@ Analyzes an uploaded image, localizes faces, validates quality, runs the special
   "filename": "portrait.jpg",
   "prediction": "FAKE",
   "confidence": 0.9984,
-  "verdict_source": "consensus_voting",
+  "verdict_source": "two_model_fusion (EfficientNet-B0 + ViT)",
   "faces_detected": 1,
   "face_usable": true,
   "face_bbox": [124, 82, 310, 315],
