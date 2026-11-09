@@ -93,3 +93,25 @@ outputs/test_crops/*
 !outputs/test_crops/.gitkeep
 outputs/diagnostics/*
 !outputs/diagnostics/.gitkeep
+outputs/audit/
+outputs/authenticity_repair/
+outputs/detection_repair/
+
+# ==============================================================================
+# FRONTEND BUILDS & DEPENDENCIES
+# ==============================================================================
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+frontend/legacy_vanilla/
+
+# ==============================================================================
+# SCRATCH & TEMPORARY TOOLS
+# ==============================================================================
+.taste-skill/
+stitch_exports/
+scratch/
+frontendsample*.png
+

@@ -184,10 +184,19 @@ DeepFake-Forensics/
 ├── requirements.txt          # Python dependencies
 ├── README.md                 # Project documentation
 │
-├── frontend/                 # React + Vite responsive web application
-│   ├── index.html            # Dashboard layout
-│   ├── app.js                # Frontend controller & API bindings
-│   └── styles.css            # Responsive dark/light theme styles
+├── frontend/                 # Modern React + Vite responsive web application
+│   ├── src/                  # React UI components, pages, context & services
+│   │   ├── components/       # Modular UI components (Header, Footer, Shared)
+│   │   ├── pages/            # Landing, Analyze, Results, Explainability, History, About
+│   │   ├── services/         # API client, PDF reporting, IndexedDB storage
+│   │   └── assets/           # Bundled artwork, sample portraits, and variable fonts
+│   ├── public/               # Static assets served directly
+│   ├── package.json          # Frontend dependencies & build commands
+│   ├── vite.config.js        # Vite dev server proxy & production build config
+│   ├── tailwind.config.js    # Tailwind CSS layout configuration
+│   ├── app.js                # Single-page controller (FastAPI static fallback)
+│   ├── index.html            # Single-page template
+│   └── styles.css            # Responsive dark/light forensic theme
 │
 ├── models/                   # Forensic model checkpoints & configs
 │   ├── efficientnet_b0_best.pth  # Primary classifier (46 MB, Git tracked)
@@ -211,6 +220,7 @@ DeepFake-Forensics/
 │   ├── evaluate_routing_comparison.py   # Legacy routing evaluation
 │   ├── train_and_evaluate_router.py     # DINOv2 router training script
 │   ├── assemble_router_dataset.py       # Dataset curation utility
+│   ├── prepare_frontend_assets.py       # Frontend font & sample asset preparation
 │   └── run_preprocessing_comparison.py  # RVF10K preprocessing benchmark
 │
 ├── src/                      # Application source code
@@ -227,9 +237,10 @@ DeepFake-Forensics/
 │       ├── community_forensics_vit.py # Community Forensics ViT detector
 │       ├── hybrid_srm_detector.py    # Hybrid SRM dual-stream detector
 │       ├── sbi_detector.py           # SBI EfficientNet-B4 detector
-│       └── vit_detector.py           # Secondary ViT detector
+│       ├── vit_detector.py           # Secondary ViT detector
+│       └── verdict_config.json       # Calibrated verdict thresholds & rule config
 │
-└── tests/                    # Comprehensive unit & integration test suite (133 tests)
+└── tests/                    # Comprehensive unit and regression test suite (including test_verdict_v3.py)
 ```
 
 ---
@@ -309,6 +320,14 @@ The application automatically serves:
 - **Interactive Web Interface**: `http://localhost:8000/`
 - **Interactive OpenAPI Documentation (Swagger UI)**: `http://localhost:8000/docs`
 - **Alternative API Documentation (ReDoc)**: `http://localhost:8000/redoc`
+
+### Running the Test Suite
+
+Execute the unit and regression tests for Verdict Engine v3:
+
+```bash
+python -m unittest tests/test_verdict_v3.py
+```
 
 ---
 
